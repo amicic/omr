@@ -52,6 +52,11 @@ public:
 	MM_CopyScanCacheStandard *_deferredCopyCache; /**< a copy cache about to be pushed to scan queue, but before that may be merged with some other caches that collectively form contiguous memory */
 	MM_CopyScanCacheStandard *_tenureCopyScanCache; /**< the current copy cache for tenuring */
 	MM_CopyScanCacheStandard *_effectiveCopyScanCache; /**< the the copy cache the received the most recently copied object, or NULL if no object copied in copy() */
+	
+	volatile MM_CopyScanCacheStandard *_inactiveSurvivorCopyScanCache; /**< the current copy cache for flipping */
+	volatile MM_CopyScanCacheStandard *_inactiveDeferredCopyCache; /**< a copy cache about to be pushed to scan queue, but before that may be merged with some other caches that collectively form contiguous memory */
+	volatile MM_CopyScanCacheStandard *_inactiveTenureCopyScanCache; /**< the current copy cache for tenuring */
+	
 #if defined(OMR_GC_MODRON_SCAVENGER)
 	J9VMGC_SublistFragment _scavengerRememberedSet;
 #endif
@@ -70,12 +75,14 @@ public:
 	static MM_EnvironmentStandard *newInstance(MM_GCExtensionsBase *extensions, OMR_VMThread *vmThread);
 	
 	virtual void flushNonAllocationCaches();
-	virtual void flushGCCaches();
+	virtual void flushGCCaches(bool forWalk);
 	
 	virtual void initializeGCThread() {
 		/* before a thread turning into a GC one, it shortly acted as a mutator (during thread attach sequence),
-		 * which means it may have allocated or exacuted an object access barrier. */
-		flushGCCaches();
+		 * which means it may have allocated or executed an object access barrier. */
+		 // todo: should we just call  GC_OMRVMThreadInterface::flushCachesForGC(this);
+		 // that we'll do even more (RS flush)
+		flushGCCaches(true);
 	}
 
 	MMINLINE static MM_EnvironmentStandard *getEnvironment(OMR_VMThread *omrVMThread) { return static_cast<MM_EnvironmentStandard*>(omrVMThread->_gcOmrVMThreadExtensions); }
@@ -88,6 +95,9 @@ public:
 		,_deferredCopyCache(NULL)
 		,_tenureCopyScanCache(NULL)
 		,_effectiveCopyScanCache(NULL)
+		,_inactiveSurvivorCopyScanCache(NULL)
+		,_inactiveDeferredCopyCache(NULL)
+		,_inactiveTenureCopyScanCache(NULL)
 		,_tenureTLHRemainderBase(NULL)
 		,_tenureTLHRemainderTop(NULL)
 		,_loaAllocation(false)

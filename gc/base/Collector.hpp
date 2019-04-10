@@ -89,7 +89,7 @@ public:
 	 * @return boolean indicating if the last GC completed successfully.
 	 */
 	bool gcCompleted() { return _gcCompleted; }
-
+	
 private:
 	void setThreadFailAllocFlag(MM_EnvironmentBase *env, bool flag);
 	bool checkForExcessiveGC(MM_EnvironmentBase* env, MM_Collector *collector);

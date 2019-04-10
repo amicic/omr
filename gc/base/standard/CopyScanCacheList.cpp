@@ -253,7 +253,14 @@ uintptr_t
 MM_CopyScanCacheList::getApproximateEntryCount()
 {
 	uintptr_t entries = 0;
-	for (uintptr_t i = 0; i < _sublistCount; i++) {
+	for (uintptr_t i = 0; i < _sublistCount; i++)
+	{
+		if (0 == rand() % 50)
+
+		{
+			omrthread_sleep(1);
+		}
+
 		entries += _sublists[i]._entryCount;
 	}
 
