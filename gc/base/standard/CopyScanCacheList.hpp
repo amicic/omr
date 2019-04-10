@@ -78,6 +78,7 @@ private:
 	
 	MM_CopyScanCacheChunk *_chunkHead; 
 	uintptr_t _incrementEntryCount;
+public:	
 	uintptr_t _totalAllocatedEntryCount;
 	
 	volatile uintptr_t *_cachedEntryCount; /* pointer to cachedEntryCount, that is shared among all lists (of all nodes) */

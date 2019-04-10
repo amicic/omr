@@ -40,6 +40,7 @@
 #include "ModronAssertions.h"
 #include "OMRVMInterface.hpp"
 #include "ObjectAllocationInterface.hpp"
+#include "Scavenger.hpp"
 
 #if defined(OMR_GC_SEGREGATED_HEAP)
 #include "HeapRegionQueue.hpp"
@@ -432,6 +433,26 @@ MM_EnvironmentBase::acquireExclusiveVMAccessForGC(MM_Collector *collector, bool 
 	/* thread is the winner for requesting a GC (possibly through recursive
 	 * calls).  proceed with acquiring exclusive access. */
 	Assert_MM_true(_omrVMThread == extensions->gcExclusiveAccessThreadId);
+
+//	OMRPORT_ACCESS_FROM_OMRPORT(getPortLibrary());
+//	omrtty_printf("acquireExclusiveVMAccessForGC vmThread %llx winner, about to acquire exclusive\n", getLanguageVMThread());
+
+	// this thread is not releasing VM access and don't have a chance (as other threads) to release GC caches through VMaccess-release hook
+	// todo: this should be part of acquireExclusiveVMAccess (via hook), since GC is not the only one who can acquire exclusive
+	flushGCCaches(false); // (false should work, since this will be flushed one more time, as any other thread)
+
+	// this is not good enough. it can be called for Concurrent Global GC, while Concurrent Scavenger is also in progress
+	//collector->notifyAcquireExclusiveVMAccess(this);
+
+	// even this is probably not good enough, since exclusive can be called from external party -> should use an acquireExclusive hook
+#if defined(OMR_GC_CONCURRENT_SCAVENGER)
+	if (extensions->concurrentScavenger) {
+			if (NULL != extensions->scavenger) {
+				extensions->scavenger->notifyAcquireExclusiveVMAccess(this);
+			}
+	}
+#endif /* OMR_GC_CONCURRENT_SCAVENGER */
+
 
 	acquireExclusiveVMAccess();
 

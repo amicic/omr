@@ -591,10 +591,13 @@ public:
 	MMINLINE MM_WorkStack *getWorkStack() { return &_workStack; }
 
 	virtual void flushNonAllocationCaches() { _delegate.flushNonAllocationCaches(); }
+<<<<<<< Upstream, based on eclipse-omr/master
 	/* Flush GC specific caches (of mutator thread involved in object graph traversal)
 	 * For example, push copy caches created by Read Barrier in Concurrent Scavenger to be scanned.  
 	 * @param final if true it's done in a STW pass at the start of GC. We may do some other things beyond pushing caches, like make the unused part of cache walkable. If false (called in a middle of a GC cycle) we don't care about having heap walkable)
 	 */
+=======
+>>>>>>> f74984e Force OOL VM access on copy cache refresh
 	virtual void flushGCCaches(bool final) {}
 
 	/**

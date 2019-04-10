@@ -81,6 +81,11 @@ public:
 	virtual void initializeGCThread() {
 		/* before a thread turning into a GC one, it shortly acted as a mutator (during thread attach sequence),
 		 * which means it may have allocated or executed an object access barrier. */
+<<<<<<< Upstream, based on eclipse-omr/master
+=======
+		 // todo: should we just call  GC_OMRVMThreadInterface::flushCachesForGC(this);
+		 // that we'll do even more (RS flush)
+>>>>>>> f74984e Force OOL VM access on copy cache refresh
 		flushGCCaches(true);
 	}
 

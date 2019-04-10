@@ -182,7 +182,11 @@ public:
 	/**
 	 * Returns true if a mutator threads entered native code without releasing VM access
 	 */
+<<<<<<< Upstream, based on eclipse-omr/master
 	bool inNative() { return false; }
+=======
+	bool inNative() { return false; }	
+>>>>>>> f74984e Force OOL VM access on copy cache refresh
 
 	/**
 	 * Check whether another thread is requesting exclusive VM access. This method must be

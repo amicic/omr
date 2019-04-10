@@ -250,7 +250,11 @@ MM_MasterGCThread::masterThreadEntryPoint()
 
 		/* attachVMThread could have allocated and execute a barrier (until point, this thread acted as a mutator thread.
 		 * Flush GC chaches (like barrier buffers) before turning into the master thread */
+<<<<<<< Upstream, based on eclipse-omr/master
 		env->flushGCCaches(true);
+=======
+		env->flushGCCaches(false);
+>>>>>>> f74984e Force OOL VM access on copy cache refresh
 
 		env->setThreadType(GC_MASTER_THREAD);
 
