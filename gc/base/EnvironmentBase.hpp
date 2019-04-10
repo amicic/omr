@@ -424,6 +424,11 @@ public:
 	 * Releases shared VM access.
 	 */
 	void releaseVMAccess();
+	
+	/**
+	 * Returns true if a mutator threads entered native code without releasing VM access
+	 */
+	MMINLINE bool inNative() { return _delegate.inNative(); }
 
 	/**
 	 * Acquire exclusive access to request a gc.
@@ -512,13 +517,11 @@ public:
 	 */
 	bool exclusiveAccessBeatenByOtherThread() { return _exclusiveAccessBeatenByOtherThread; }
 
-#if defined(OMR_GC_CONCURRENT_SCAVENGER)
 	/**
 	 * Force thread to use out-of-line request for VM access. This may be required if there
 	 * is there is an event waiting to be hooked the next time the thread acquires VM access.
 	 */
 	void forceOutOfLineVMAccess() { _delegate.forceOutOfLineVMAccess(); }
-#endif /* OMR_GC_CONCURRENT_SCAVENGER */
 
 #if defined (OMR_GC_THREAD_LOCAL_HEAP)
 	/**
@@ -588,7 +591,7 @@ public:
 	MMINLINE MM_WorkStack *getWorkStack() { return &_workStack; }
 
 	virtual void flushNonAllocationCaches() { _delegate.flushNonAllocationCaches(); }
-	virtual void flushGCCaches() {}
+	virtual void flushGCCaches(bool final) {}
 
 	/**
 	 * Get a pointer to common GC metadata attached to this environment. The GC environment structure

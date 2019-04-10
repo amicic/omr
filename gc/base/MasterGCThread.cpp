@@ -248,9 +248,9 @@ MM_MasterGCThread::masterThreadEntryPoint()
 		/* thread attached successfully */
 		MM_EnvironmentBase *env = MM_EnvironmentBase::getEnvironment(omrVMThread);
 
-		/* attachVMThread could allocate an execute a barrier (since it that point, this thread acted as a mutator thread.
+		/* attachVMThread could have allocated and execute a barrier (until point, this thread acted as a mutator thread.
 		 * Flush GC chaches (like barrier buffers) before turning into the master thread */
-		env->flushGCCaches();
+		env->flushGCCaches(false);
 
 		env->setThreadType(GC_MASTER_THREAD);
 

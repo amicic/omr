@@ -59,6 +59,8 @@ class MM_SublistPool;
 
 struct OMR_VM;
 
+extern "C" void concurrentScavengerAsyncCallbackHandler(OMR_VMThread *omrVMThread);
+
 /**
  * @todo Provide class documentation
  * @ingroup GC_Modron_Standard
@@ -335,6 +337,13 @@ public:
 	
 	void scavengeRememberedSetListIndirect(MM_EnvironmentStandard *env);
 	void scavengeRememberedSetListDirect(MM_EnvironmentStandard *env);
+
+	MMINLINE void handleInactiveSurvivorCopyScanCache(MM_EnvironmentStandard *currentEnv, MM_EnvironmentStandard *targetEnv, bool flushCaches, bool final);
+	MMINLINE void handleSurvivorCopyScanCache(MM_EnvironmentStandard *currentEnv, MM_EnvironmentStandard *targetEnv, bool flushCaches, bool final);
+	MMINLINE void handleInactiveTenureCopyScanCache(MM_EnvironmentStandard *currentEnv, MM_EnvironmentStandard *targetEnv, bool flushCaches, bool final);
+	MMINLINE void handleTenureCopyScanCache(MM_EnvironmentStandard *currentEnv, MM_EnvironmentStandard *targetEnv, bool flushCaches, bool final);
+	MMINLINE void handleInactiveDeferredCopyScanCache(MM_EnvironmentStandard *currentEnv, MM_EnvironmentStandard *targetEnv, bool flushCaches, bool final);
+	MMINLINE void handleDeferredCopyScanCache(MM_EnvironmentStandard *currentEnv, MM_EnvironmentStandard *targetEnv, bool flushCaches, bool final);
 #endif /* OMR_GC_CONCURRENT_SCAVENGER */
 
 	/**
@@ -588,6 +597,13 @@ public:
 
 	/* API used by ParallelScavengeTask to set _waitingCountAliasThreshold. */
 	void setAliasThreshold(uintptr_t waitingCountAliasThreshold) { _waitingCountAliasThreshold = waitingCountAliasThreshold; }
+	
+	/**
+	 * Notify Collector that a thread is about to acquire Exclusive VM access.
+	 * This can be useful in scenario when GC is concurrent, and currently in progress.
+	 * env invoking thread that is about to acquire Exclusive VM access
+	 */
+	void notifyAcquireExclusiveVMAccess(MM_EnvironmentBase* env);
 
 protected:
 	virtual void setupForGC(MM_EnvironmentBase *env);
@@ -664,7 +680,11 @@ public:
 	 * @param env Invoking thread, for which copy caches are to be released. Could be either GC or mutator thread.
 	 * @param final If true (typically at the end of a cycle), abandon TLH remainders, too. Otherwise keep them for possible future copy cache refresh.
 	 */
-	void threadReleaseCaches(MM_EnvironmentBase *env, bool final);
+	void threadReleaseCaches(MM_EnvironmentBase *env, bool flushCaches, bool final);
+	
+	MMINLINE bool activateSurvivorCopyScanCache(MM_EnvironmentStandard *env);
+	MMINLINE bool activateTenureCopyScanCache(MM_EnvironmentStandard *env);
+	void activateDeferredCopyScanCache(MM_EnvironmentStandard *env);
 	
 	/**
 	 * trigger STW phase (either start or end) of a Concurrent Scavenger Cycle 
@@ -859,6 +879,7 @@ public:
 		, _concurrentState(concurrent_state_idle)
 		, _concurrentScavengerSwitchCount(0)
 		, _shouldYield(false)
+		, _concurrentPhaseStats()
 #endif /* #if defined(OMR_GC_CONCURRENT_SCAVENGER) */
 
 		, _omrVM(env->getOmrVM())
