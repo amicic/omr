@@ -129,8 +129,6 @@ GC_OMRVMInterface::flushCachesForGC(MM_EnvironmentBase *env)
 			allocatedBytesMax = allocatedBytes;
 			vmThreadMax = omrVMThread;
 		}
-//		OMRPORT_ACCESS_FROM_ENVIRONMENT(env);
-//		omrtty_printf("flushCachesForGC vmThread 0x%llx\n", omrVMThread->_language_vmthread);
 		GC_OMRVMThreadInterface::flushCachesForGC(threadEnv);
 	}
 

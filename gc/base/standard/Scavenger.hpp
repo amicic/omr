@@ -125,12 +125,14 @@ private:
 	MM_MasterGCThread _masterGCThread; /**< An object which manages the state of the master GC thread */
 	
 	volatile enum ConcurrentState {
-		concurrent_state_idle,
-		concurrent_state_init,
-		concurrent_state_roots,
-		concurrent_state_scan,
-		concurrent_state_complete
-	} _concurrentState;
+		concurrent_phase_idle,
+		concurrent_phase_init,
+		concurrent_phase_roots,
+		concurrent_phase_scan,
+		concurrent_phase_complete
+	} _concurrentPhase;
+	
+	bool _currentPhaseConcurrent;
 	
 	uint64_t _concurrentScavengerSwitchCount; /**< global counter of cycle start and cycle end transitions */
 	volatile bool _shouldYield; /**< Set by the first GC thread that observes that a criteria for yielding is met. Reset only when the concurrent phase is finished. */
@@ -185,7 +187,7 @@ private:
 					 
 			shouldAbort = _shouldYield;
 			if (shouldAbort) {
-				Assert_MM_true(concurrent_state_scan == _concurrentState);
+				Assert_MM_true(concurrent_phase_scan == _concurrentPhase);
 				/* Since we are aborting the scan loop without synchornizing with other GC threads (before which we flush buffers),
 				 * we have to do it now. 
 				 * There should be no danger in not synchonizing with other threads, since we can only abort/yield in main scan loop
@@ -385,28 +387,21 @@ public:
 	MMINLINE uintptr_t copyCacheDistanceMetric(MM_CopyScanCacheStandard* cache);
 
 	MMINLINE MM_CopyScanCacheStandard *getNextScanCacheFromList(MM_EnvironmentStandard *env);
-	void addCopyCachesToFreeList(MM_EnvironmentStandard *env);
+	void finalReturnCopyCachesToFreeList(MM_EnvironmentStandard *env);
+	void returnEmptyCopyCachesToFreeList(MM_EnvironmentStandard *env);
 	MMINLINE void addCacheEntryToScanListAndNotify(MM_EnvironmentStandard *env, MM_CopyScanCacheStandard *newCacheEntry);
-
-	MMINLINE bool
-	isWorkAvailableInCache(MM_CopyScanCacheStandard *cache)
-	{
-		return (cache->scanCurrent < cache->cacheAlloc);
-	}
 
 	MMINLINE bool
 	isWorkAvailableInCacheWithCheck(MM_CopyScanCacheStandard *cache)
 	{
-		return ((NULL != cache) && isWorkAvailableInCache(cache));
+		return ((NULL != cache) && cache->isScanWorkAvailable());
 	}
-
-	/**
-	 * reinitializes the cache with the given base and top addresses.
-	 * @param cache cache to be reinitialized.
-	 * @param base base address of cache
-	 * @param top top address of cache
-	 */
-	MMINLINE void reinitCache(MM_CopyScanCacheStandard *cache, void *base, void *top);
+	
+	MMINLINE bool
+	isEmptyCacheWithCheck(MM_CopyScanCacheStandard *cache)
+	{
+		return ((NULL != cache) && !cache->isScanWorkAvailable());
+	}
 
 	/**
 	 * An attempt to get a preallocated scan cache header, free list will be locked
@@ -617,7 +612,9 @@ public:
 	 * This can be useful in scenario when GC is concurrent, and currently in progress.
 	 * env invoking thread that is about to acquire Exclusive VM access
 	 */
-	void notifyAcquireExclusiveVMAccess(MM_EnvironmentBase* env);
+	void externalNotifyToYield(MM_EnvironmentBase* env);
+	
+	bool shouldDoFinalNotify(MM_EnvironmentStandard *env);
 
 protected:
 	virtual void setupForGC(MM_EnvironmentBase *env);
@@ -695,14 +692,7 @@ public:
 	 * @param flushCaches If true, really push caches to scan queue, otherwise just deactivate them for possible near future use
 	 * @param final If true (typically at the end of a cycle), abandon TLH remainders, too. Otherwise keep them for possible future copy cache refresh.
 	 */
-	void threadReleaseCaches(MM_EnvironmentBase *env, bool flushCaches, bool final);
-<<<<<<< Upstream, based on eclipse-omr/master
-=======
-	
-	MMINLINE bool activateSurvivorCopyScanCache(MM_EnvironmentStandard *env);
-	MMINLINE bool activateTenureCopyScanCache(MM_EnvironmentStandard *env);
-	void activateDeferredCopyScanCache(MM_EnvironmentStandard *env);
->>>>>>> f74984e Force OOL VM access on copy cache refresh
+	void threadReleaseCaches(MM_EnvironmentBase *currentEnvBase, MM_EnvironmentBase *env, bool flushCaches, bool final);
 	
 	/**
 	 * trigger STW phase (either start or end) of a Concurrent Scavenger Cycle 
@@ -718,8 +708,17 @@ public:
 	void workThreadScan(MM_EnvironmentStandard *env);
 	void workThreadComplete(MM_EnvironmentStandard *env);
 
+	bool isCurrentPhaseConcurrent() {
+		return _currentPhaseConcurrent;
+	}
+	
+	bool isConcurrentCycleInProgress() {
+		return concurrent_phase_idle != _concurrentPhase;
+	}
+	
+	/* TODO: remove once downstream projects start using isConcurrentCycleInProgress/isCurrentPhaseConcurrent */
 	bool isConcurrentInProgress() {
-		return concurrent_state_idle != _concurrentState;
+		return concurrent_phase_idle != _concurrentPhase;
 	}
 	
 	bool isMutatorThreadInSyncWithCycle(MM_EnvironmentBase *env) {
@@ -894,7 +893,8 @@ public:
 		, _regionManager(regionManager)
 #if defined(OMR_GC_CONCURRENT_SCAVENGER)
 		, _masterGCThread(env)
-		, _concurrentState(concurrent_state_idle)
+		, _concurrentPhase(concurrent_phase_idle)
+		, _currentPhaseConcurrent(false)
 		, _concurrentScavengerSwitchCount(0)
 		, _shouldYield(false)
 		, _concurrentPhaseStats()

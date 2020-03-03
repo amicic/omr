@@ -41,7 +41,6 @@ typedef enum RootScannerEntity {
 	RootScannerEntity_StringTable,
 	RootScannerEntity_JNIGlobalReferences,
 	RootScannerEntity_JNIWeakGlobalReferences,
-	RootScannerEntity_DoubleMappedObjects,
 	RootScannerEntity_DebuggerReferences,
 	RootScannerEntity_DebuggerClassReferences,
 	RootScannerEntity_MonitorReferences,
@@ -62,6 +61,7 @@ typedef enum RootScannerEntity {
 	RootScannerEntity_MonitorLookupCaches,
 	RootScannerEntity_MonitorLookupCachesComplete,
 	RootScannerEntity_MonitorReferenceObjectsComplete,
+	RootScannerEntity_DoubleMappedObjects,
 
 	/* Must be last, do not use this entity! */
 	RootScannerEntity_Count

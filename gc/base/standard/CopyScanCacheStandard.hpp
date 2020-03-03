@@ -73,6 +73,24 @@ public:
 	{
 		return (OMR_SCAVENGER_CACHE_TYPE_SPLIT_ARRAY == (flags & OMR_SCAVENGER_CACHE_TYPE_SPLIT_ARRAY));
 	}
+	
+	
+	/**
+	 * reinitializes the cache with the given base and top addresses.
+	 * @param base base address of cache
+	 * @param top top address of cache
+	 */
+	void reinitCache(void *base, void *top) {
+		cacheBase = base;
+		cacheAlloc = base;
+		scanCurrent = base;
+		cacheTop = top;
+		_arraySplitIndex = 0;
+		_arraySplitAmountToScan = 0;
+		_arraySplitRememberedSlot = NULL;
+		_hasPartiallyScannedObject = false;
+		_shouldBeRemembered = false;
+	}
 
 	/**
 	 * Create a CopyScanCacheStandard object.
