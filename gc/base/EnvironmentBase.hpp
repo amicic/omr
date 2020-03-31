@@ -559,7 +559,21 @@ public:
 	/**
 	 * Initialization specifically for GC threads
 	 */
-	virtual void initializeGCThread() {}
+	virtual void initializeGCThread() {
+		/* before a thread turning into a GC one, it shortly acted as a mutator (during thread attach sequence),
+		 * which means it may have allocated or executed an object access barrier. */
+		//OMRPORT_ACCESS_FROM_ENVIRONMENT(this);
+		//omrtty_printf("EnvironmentBase::initializeGCThread this %llx/%llx about to flushGCCaches\n", this, getLanguageVMThread());
+		// not calling as final since we dont want this to race with the final flush walk of all threads
+		// this thread does not have VM access and can 'bleed' flushGCCaches into the final walk that occurs even under exclusive VM access
+		// if we do temp acquire VM access then we can even run flushGCCaches as final (in which case final walk can skip non-mutator threads)
+		// problem with the bleading is:
+		// 1) race with abandoning remainder from both this thread and final walk thread
+		// 2) race between this thread creating remainder (since flushCaches is true) while final walk is trying to abandon it		
+		acquireVMAccess();
+		flushGCCaches(true);
+		releaseVMAccess();
+	}
 
 	MM_GCCode getCycleStateGCCode() { return _cycleState->_gcCode; }
 

@@ -73,6 +73,8 @@ void
 MM_EnvironmentStandard::tearDown(MM_GCExtensionsBase *extensions)
 {
 	/* If we are in a middle of a concurrent GC, we may want to flush GC caches (if thread happens to do GC work) */
+//	OMRPORT_ACCESS_FROM_ENVIRONMENT(this);
+//	omrtty_printf("tearDown %llx about to flushGCCaches\n", getLanguageVMThread());
 	flushGCCaches(true);
 	/* tearDown base class */
 	MM_EnvironmentBase::tearDown(extensions);

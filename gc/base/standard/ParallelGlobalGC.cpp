@@ -1544,6 +1544,8 @@ MM_ParallelGlobalGC::notifyAcquireExclusiveVMAccess(MM_EnvironmentBase *env)
 		 * through VMaccess-release hook, so it's doing it now.
 		 * false (not final) argument should work this time, since this will be flushed one more time (as final), as any other thread, at the start of STW increment.
 		 */
+//		OMRPORT_ACCESS_FROM_ENVIRONMENT(env);
+//		omrtty_printf("notifyAcquireExclusiveVMAccess %llx about to flushGCCaches\n", env->getLanguageVMThread());
 		env->flushGCCaches(false);
 
 		/* Must specifically call it against Scavenger, even though the Exclusive access might have been requested to perform Concurrent Global. */

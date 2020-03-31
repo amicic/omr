@@ -68,7 +68,7 @@ public:
 	
 	virtual bool isStwCollectionInProgress()
 	{
-		return false;
+		return true;
 	}
 
 	/**

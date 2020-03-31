@@ -20,6 +20,10 @@
  * SPDX-License-Identifier: EPL-2.0 OR Apache-2.0 OR GPL-2.0 WITH Classpath-exception-2.0 OR LicenseRef-GPL-2.0 WITH Assembly-exception
  *******************************************************************************/
 
+//#define RAND_DEBUG 100
+#define RAND_DEBUG 30
+//#define RAND_DEBUG 10
+
 #if 0
 #define OMR_SCAVENGER_DEBUG
 #define OMR_SCAVENGER_TRACE
@@ -1027,12 +1031,20 @@ retry:
 			}
 			/* try to use TLH remainder from previous discard */
 			if (((uintptr_t)env->_survivorTLHRemainderTop - (uintptr_t)env->_survivorTLHRemainderBase) >= cacheSize) {
-				Assert_MM_true(NULL != env->_survivorTLHRemainderBase);
-				Assert_MM_true(NULL != env->_survivorTLHRemainderTop);
 				allocateResult = true;
 				addrBase = env->_survivorTLHRemainderBase;
 				addrTop = env->_survivorTLHRemainderTop;
+//				OMRPORT_ACCESS_FROM_ENVIRONMENT(env);
+//				omrtty_printf("reuse survivor remainder thread %llx publicFlags %llx\n",
+//						env->getLanguageVMThread(), (uintptr_t)(((J9VMThread*)env->getLanguageVMThread())->publicFlags));
+				Assert_MM_true(NULL != env->_survivorTLHRemainderBase);
 				env->_survivorTLHRemainderBase = NULL;
+#if RAND_DEBUG
+				if (0 == rand() % RAND_DEBUG) {
+					omrthread_sleep(1);
+				}
+#endif
+				Assert_MM_true(NULL != env->_survivorTLHRemainderTop);
 				env->_survivorTLHRemainderTop = NULL;
 				activateDeferredCopyScanCache(env);
 			} else if (_extensions->tlhSurvivorDiscardThreshold < cacheSize) {
@@ -1139,13 +1151,18 @@ retry:
 			}
 			/* try to use TLH remainder from previous discard. */
 			if (((uintptr_t)env->_tenureTLHRemainderTop - (uintptr_t)env->_tenureTLHRemainderBase) >= cacheSize) {
-				Assert_MM_true(NULL != env->_tenureTLHRemainderBase);
-				Assert_MM_true(NULL != env->_tenureTLHRemainderTop);
 				allocateResult = true;
 				addrBase = env->_tenureTLHRemainderBase;
 				addrTop = env->_tenureTLHRemainderTop;
 				satisfiedInLOA = env->_loaAllocation;
+				Assert_MM_true(NULL != env->_tenureTLHRemainderBase);
 				env->_tenureTLHRemainderBase = NULL;
+#if RAND_DEBUG
+				if (0 == rand() % RAND_DEBUG) {
+					omrthread_sleep(1);
+				}
+#endif
+				Assert_MM_true(NULL != env->_tenureTLHRemainderTop);
 				env->_tenureTLHRemainderTop = NULL;
 				env->_loaAllocation = false;
 				activateDeferredCopyScanCache(env);
@@ -1279,7 +1296,23 @@ MM_Scavenger::copyAndForward(MM_EnvironmentStandard *env, volatile omrobjectptr_
 				forwardHeader.copyOrWait(forwardPtr);
 				*objectPtrIndirect = forwardPtr;
 			} else {
-				omrobjectptr_t destinationObjectPtr = copy(env, &forwardHeader);
+				omrobjectptr_t destinationObjectPtr = NULL;
+
+//				if (env->_scanningThreadSlot) {
+//					OMRPORT_ACCESS_FROM_ENVIRONMENT(env);
+//					if (0 == (uint64_t)objectPtr % 1223) {
+//					if (0 == (uint64_t)objectPtr % 3571) {
+//					if (0 == (uint64_t)objectPtr % 48611) {
+					if (0 == (uint64_t)objectPtr % 163841) {
+
+//						omrtty_printf("copyAndForward threadSlot %zu\n", env->_scanningThreadSlot);
+						setBackOutFlag(env, backOutFlagRaised);
+					} else {
+						destinationObjectPtr = copy(env, &forwardHeader);
+					}
+//				} else {
+//					destinationObjectPtr = copy(env, &forwardHeader);
+//				}
 				if (NULL == destinationObjectPtr) {
 					/* Failure - the scavenger must back out the work it has done. */
 					/* raise the alert and return (true - must look like a new object was handled) */
@@ -1639,8 +1672,12 @@ MM_Scavenger::copy(MM_EnvironmentStandard *env, MM_ForwardedHeader* forwardedHea
 		 * If we see large amount of discards even with low discard threshold, we may reconsider enqueueing discarded TLHs.
 		 */
 		if (copyCache->flags & OMR_SCAVENGER_CACHE_TYPE_TENURESPACE) {
+//			OMRPORT_ACCESS_FROM_ENVIRONMENT(env);
+//			omrtty_printf("copy() vmthread %llx about to abandonTenureTLHRemainder\n",	env->getLanguageVMThread());
 			abandonTenureTLHRemainder(env);
 		} else if (copyCache->flags & OMR_SCAVENGER_CACHE_TYPE_SEMISPACE) {
+//			OMRPORT_ACCESS_FROM_ENVIRONMENT(env);
+//			omrtty_printf("copy() vmthread %llx about to abandonSurvivorTLHRemainder\n",	env->getLanguageVMThread());
 			abandonSurvivorTLHRemainder(env);
 		} else {
 			Assert_MM_unreachable();
@@ -2007,6 +2044,8 @@ MMINLINE void
 MM_Scavenger::flushBuffersForGetNextScanCache(MM_EnvironmentStandard *env, bool finalFlush)
 {
 	_delegate.flushReferenceObjects(env);
+	/* No need to flush unfinalizedObjectBuffer. At this phase it's not used by GC threads.
+	 * During concurrent phase, it may be non-empty, but only for Mutators, which are not involved in scan loop. */
 	flushRememberedSet(env);
 	flushCopyScanCounts(env, finalFlush);
 
@@ -2021,6 +2060,7 @@ MM_Scavenger::flushBuffersForGetNextScanCache(MM_EnvironmentStandard *env, bool 
 bool
 MM_Scavenger::shouldDoFinalNotify(MM_EnvironmentStandard *env)
 {
+//	OMRPORT_ACCESS_FROM_ENVIRONMENT(env);
 #if defined(OMR_GC_CONCURRENT_SCAVENGER)
 	if (_extensions->concurrentScavengeExhaustiveTermination && isCurrentPhaseConcurrent() && !_scavengeCacheFreeList.areAllCachesReturned()) {
 		
@@ -2028,24 +2068,38 @@ MM_Scavenger::shouldDoFinalNotify(MM_EnvironmentStandard *env)
 		 * Activate Async Singnal handler which will force Mutator threads to flush their copy caches for scanning. */
 		_delegate.signalThreadsToFlushCaches(env);
 
+//		omrtty_printf("shouldDoFinalNotify vmthread %llx completed signalling nonEmptyQueues %zu nonReturnedCaches %zu\n",
+//				env->getLanguageVMThread(), _cachedEntryCount, _scavengeCacheFreeList._totalAllocatedEntryCount - _scavengeCacheFreeList.getApproximateEntryCount());
+//
+
 		/* If no work has been created and no one requested to yeild meanwhile, go and wait for new work */
-		if ((0 == _cachedEntryCount) && !checkAndSetShouldYieldFlag(env)) {
-			Assert_MM_true(!_scavengeCacheFreeList.areAllCachesReturned());
+		if (!checkAndSetShouldYieldFlag(env)) {
+			if (0 == _cachedEntryCount) {
+				Assert_MM_true(!_scavengeCacheFreeList.areAllCachesReturned());
+//				omrtty_printf("shouldDoFinalNotify vmthread %llx about to block nonEmptyQueues %zu nonReturnedCaches %zu\n",
+//						env->getLanguageVMThread(),_cachedEntryCount,  _scavengeCacheFreeList._totalAllocatedEntryCount - _scavengeCacheFreeList.getApproximateEntryCount());
 
-			/* The only known reason for timeout is a rare case if Exclusive VM Access request came from a nonGC party. If we did not have a timeout,
-			 * we would end up wating for mutator threads that hold Copy Caches, but they would not respond if they already released VM access
-			 * and blocked due to ongoing Exclusive, hence creating deadlock. Timeout of 1ms gives a chance to check if we should yield and release VM access.
-			 * Alternative solutions to providing timeout to consider in future:
-			 * 1) notify (via hook) GC that Exclusive is requested (proven to work, but breaks general async nature of how Exclusive Request is requested)
-			 * 2) release VM access prior to blocking (tricky since thread that blocks is not necessarily Master, which is the one that holds VM access)
-			 */
-			omrthread_monitor_wait_timed(_scanCacheMonitor, 1000, 0);
+				/* The only known reason for timeout is a rare case if Exclusive VM Access request came from a nonGC party. If we did not have a timeout,
+				 * we would end up wating for mutator threads that hold Copy Caches, but they would not respond if they already released VM access
+				 * and blocked due to ongoing Exclusive, hence creating deadlock. Timeout of 1ms gives a chance to check if we should yield and release VM access.
+				 * Alternative solutions to providing timeout to consider in future:
+				 * 1) notify (via hook) GC that Exclusive is requested (proven to work, but breaks general async nature of how Exclusive Request is requested)
+				 * 2) release VM access prior to blocking (tricky since thread that blocks is not necessarily Master, which is the one that holds VM access)
+				 */
+				//intptr_t ret =
+						omrthread_monitor_wait_timed(_scanCacheMonitor, 1000, 0);
+
+//				omrtty_printf("shouldDoFinalNotify vmthread %llx returned from wait ret %zu nonEmptyQueues %zu nonReturnedCaches %zu\n",
+//						env->getLanguageVMThread(), ret, _cachedEntryCount, _scavengeCacheFreeList._totalAllocatedEntryCount - _scavengeCacheFreeList.getApproximateEntryCount());
+			}
+			/* We know there is more work - can't do the final notify yet. Need to help with work and eventually re-evaulate if it's really the end */
+			return false;
 		}
-
-		/* We know there is more work - can't do the final notify yet. Need to help with work and eventually re-evaulate if it's really the end */
-		return false;
+		/* If we have to yield, we do need to notify slave threads to unblock and temporarily completely scan loop */
 	}
 #endif /* #if defined(OMR_GC_CONCURRENT_SCAVENGER) */
+//	omrtty_printf("shouldDoFinalNotify vmthread %llx about to do final notify nonEmptyQueues %zu nonReturnedCaches %zu\n",
+//			env->getLanguageVMThread(), _cachedEntryCount, _scavengeCacheFreeList._totalAllocatedEntryCount - _scavengeCacheFreeList.getApproximateEntryCount());
 	return true;
 }
 
@@ -2146,7 +2200,12 @@ MM_Scavenger::getNextScanCache(MM_EnvironmentStandard *env)
 					uint64_t waitEndTime, waitStartTime;
 					waitStartTime = omrtime_hires_clock();
 #endif /* J9MODRON_TGC_PARALLEL_STATISTICS */
+//					OMRPORT_ACCESS_FROM_OMRPORT(env->getPortLibrary());
+//					omrtty_printf("getNextScanCache vmthread %llx about to block nonEmptyQueues %zu nonReturnedCaches %zu\n",
+//							env->getLanguageVMThread(), _cachedEntryCount, _scavengeCacheFreeList._totalAllocatedEntryCount - _scavengeCacheFreeList.getApproximateEntryCount());
 					omrthread_monitor_wait(_scanCacheMonitor);
+//					omrtty_printf("getNextScanCache vmthread %llx unblocked nonEmptyQueues %zu nonReturnedCaches %zu\n",
+//							env->getLanguageVMThread(), _cachedEntryCount, _scavengeCacheFreeList._totalAllocatedEntryCount - _scavengeCacheFreeList.getApproximateEntryCount());
 #if defined(J9MODRON_TGC_PARALLEL_STATISTICS)
 					waitEndTime = omrtime_hires_clock();
 					if (doneIndex != _doneIndex) {
@@ -2962,6 +3021,7 @@ MM_Scavenger::scavengeRememberedSet(MM_EnvironmentStandard *env)
 void
 MM_Scavenger::copyAndForwardThreadSlot(MM_EnvironmentStandard *env, omrobjectptr_t *objectPtrIndirect)
 {
+	//env->_scanningThreadSlot = true;
 	/* auto-remember stack- and thread-referenced objects */
 	omrobjectptr_t objectPtr = *objectPtrIndirect;
 	if(NULL != objectPtr) {
@@ -2982,6 +3042,7 @@ MM_Scavenger::copyAndForwardThreadSlot(MM_EnvironmentStandard *env, omrobjectptr
 			}
 		}
 	}
+	//env->_scanningThreadSlot = false;
 }
 
 void
@@ -3240,6 +3301,11 @@ MM_Scavenger::clearCache(MM_EnvironmentStandard *env, MM_CopyScanCacheStandard *
 				env->_scavengerStats._tenureTLHRemainderCount += 1;
 				Assert_MM_true(NULL == env->_tenureTLHRemainderBase);
 				env->_tenureTLHRemainderBase = cache->cacheAlloc;
+#if RAND_DEBUG
+				if (0 == rand() % RAND_DEBUG) {
+					omrthread_sleep(1);
+				}
+#endif
 				Assert_MM_true(NULL == env->_tenureTLHRemainderTop);
 				env->_tenureTLHRemainderTop = cache->cacheTop;
 				env->_loaAllocation = (OMR_SCAVENGER_CACHE_TYPE_LOA == (cache->flags & OMR_SCAVENGER_CACHE_TYPE_LOA));
@@ -3250,10 +3316,18 @@ MM_Scavenger::clearCache(MM_EnvironmentStandard *env, MM_CopyScanCacheStandard *
 				env->_scavengerStats._flipDiscardBytes += discardSize;
 				allocSubSpace->abandonHeapChunk(cache->cacheAlloc, cache->cacheTop);
 			} else {
+//				OMRPORT_ACCESS_FROM_ENVIRONMENT(env);
+//				omrtty_printf("clearCache vmthread %llx creating survivorRemainder\n", env->getLanguageVMThread());
+
 				remainderCreated = true;
 				env->_scavengerStats._survivorTLHRemainderCount += 1;
 				Assert_MM_true(NULL == env->_survivorTLHRemainderBase);
 				env->_survivorTLHRemainderBase = cache->cacheAlloc;
+#if RAND_DEBUG
+				if (0 == rand() % RAND_DEBUG) {
+					omrthread_sleep(1);
+				}
+#endif
 				Assert_MM_true(NULL == env->_survivorTLHRemainderTop);
 				env->_survivorTLHRemainderTop = cache->cacheTop;
 			}
@@ -3276,28 +3350,64 @@ MM_Scavenger::clearCache(MM_EnvironmentStandard *env, MM_CopyScanCacheStandard *
 	return remainderCreated;
 }
 
+static OMR_VMThread *getCurrentOMRVMThread(OMR_VM *vm);
+
 void
 MM_Scavenger::abandonSurvivorTLHRemainder(MM_EnvironmentStandard *env)
 {
+//	OMRPORT_ACCESS_FROM_ENVIRONMENT(env);
+//	J9VMThread *vmThread = (J9VMThread *)getCurrentOMRVMThread(env->getOmrVM())->_language_vmthread;
+//	omrtty_printf("abandonSurvivorTLHRemainder current vmThread %llx target vmthread %llx base %llx top %llx\n",
+//			vmThread, env->getLanguageVMThread(), env->_survivorTLHRemainderBase, env->_survivorTLHRemainderTop);
+
 	if (NULL != env->_survivorTLHRemainderBase) {
+#if RAND_DEBUG
+				if (0 == rand() % RAND_DEBUG) {
+					omrthread_sleep(1);
+				}
+#endif
 		Assert_MM_true(NULL != env->_survivorTLHRemainderTop);
 		env->_scavengerStats._flipDiscardBytes += (uintptr_t)env->_survivorTLHRemainderTop - (uintptr_t)env->_survivorTLHRemainderBase;
 		_survivorMemorySubSpace->abandonHeapChunk(env->_survivorTLHRemainderBase, env->_survivorTLHRemainderTop);
 		env->_survivorTLHRemainderBase = NULL;
+#if RAND_DEBUG
+				if (0 == rand() % RAND_DEBUG) {
+					omrthread_sleep(1);
+				}
+#endif
 		env->_survivorTLHRemainderTop = NULL;
+	} else {
+		Assert_MM_true(NULL == env->_survivorTLHRemainderTop);
 	}
+//
+//	omrtty_printf("abandonSurvivorTLHRemainder DONE current vmThread %llx target vmthread %llx base %llx top %llx\n",
+//			vmThread, env->getLanguageVMThread(), env->_survivorTLHRemainderBase, env->_survivorTLHRemainderTop);
 }
 
 void
 MM_Scavenger::abandonTenureTLHRemainder(MM_EnvironmentStandard *env, bool preserveRemainders)
 {
+//	OMRPORT_ACCESS_FROM_ENVIRONMENT(env);
 	if (NULL != env->_tenureTLHRemainderBase) {
+#if RAND_DEBUG
+				if (0 == rand() % RAND_DEBUG) {
+					omrthread_sleep(1);
+				}
+#endif
 		Assert_MM_true(NULL != env->_tenureTLHRemainderTop);
 		_tenureMemorySubSpace->abandonHeapChunk(env->_tenureTLHRemainderBase, env->_tenureTLHRemainderTop);
 
 		if (!preserveRemainders){
+//			omrtty_printf("abandonTenureTLHRemainder vmthread %llx base %llx top %llx size %zu\n",
+//					env->getLanguageVMThread(), env->_tenureTLHRemainderBase, env->_tenureTLHRemainderTop,
+//					(uintptr_t)env->_tenureTLHRemainderTop - (uintptr_t)env->_tenureTLHRemainderBase);
 			env->_scavengerStats._tenureDiscardBytes += (uintptr_t)env->_tenureTLHRemainderTop - (uintptr_t)env->_tenureTLHRemainderBase;
 			env->_tenureTLHRemainderBase = NULL;
+#if RAND_DEBUG
+				if (0 == rand() % RAND_DEBUG) {
+					omrthread_sleep(1);
+				}
+#endif
 			env->_tenureTLHRemainderTop = NULL;
 		}
 		/* In case of Mutator threads (for concurrent scavenger) isMasterThread() is not sufficient, we must also make a thread check with getThreadType()*/
@@ -3305,6 +3415,8 @@ MM_Scavenger::abandonTenureTLHRemainder(MM_EnvironmentStandard *env, bool preser
 			saveMasterThreadTenureTLHRemainders(env);
 		}
 		env->_loaAllocation = false;
+	} else {
+		Assert_MM_true(NULL == env->_tenureTLHRemainderTop);
 	}
 }
 
@@ -3460,6 +3572,11 @@ MM_Scavenger::saveMasterThreadTenureTLHRemainders(MM_EnvironmentStandard *env)
 	_extensions->_masterThreadTenureTLHRemainderTop = env->_tenureTLHRemainderTop;
 	_extensions->_masterThreadTenureTLHRemainderBase = env->_tenureTLHRemainderBase;
 	env->_tenureTLHRemainderBase = NULL;
+#if RAND_DEBUG
+				if (0 == rand() % RAND_DEBUG) {
+					omrthread_sleep(1);
+				}
+#endif
 	env->_tenureTLHRemainderTop = NULL;
 }
 
@@ -3512,6 +3629,9 @@ MM_Scavenger::checkAndSetShouldYieldFlag(MM_EnvironmentStandard *env) {
 void
 MM_Scavenger::setBackOutFlag(MM_EnvironmentBase *env, BackOutState backOutState)
 {
+	OMRPORT_ACCESS_FROM_ENVIRONMENT(env);
+	omrtty_printf("setBackOutFlag %zu\n", backOutState);
+
 	/* Skip triggering of trace point and hook if we trying to set flag to true multiple times */
 	if (_extensions->getScavengerBackOutState() != backOutState) {
 		_backOutDoneIndex = _doneIndex;
@@ -5031,6 +5151,9 @@ MM_Scavenger::mutatorSetupForGC(MM_EnvironmentBase *envBase)
 		Assert_MM_true(NULL == env->_deferredScanCache);
 		Assert_MM_true(NULL == env->_deferredCopyCache);
 		Assert_MM_false(env->_loaAllocation);
+//		OMRPORT_ACCESS_FROM_ENVIRONMENT(env);
+//		omrtty_printf("mutatorSetupForGC vmThread %llx survivor remainder base %llx top %llx\n",
+//				env->getLanguageVMThread(), env->_survivorTLHRemainderBase, env->_survivorTLHRemainderTop);
 		Assert_MM_true(NULL == env->_survivorTLHRemainderBase);
 		Assert_MM_true(NULL == env->_survivorTLHRemainderTop);
 	}
@@ -5056,14 +5179,24 @@ MM_Scavenger::handleInactiveSurvivorCopyScanCache(MM_EnvironmentStandard *curren
 					 * since the mutator thread does not have VM access and we won't race it
 					 */
 					clearCache(targetEnv, cache);
+//					OMRPORT_ACCESS_FROM_ENVIRONMENT(currentEnv);
+//					omrtty_printf("handleInactiveSurvivorCopyScanCache currentEnv %llx targetEnv %llx vmaccess %zu about to abandonSurvivorTLHRemainder 1\n",
+//							currentEnv->getLanguageVMThread(), targetEnv->getLanguageVMThread(), (uintptr_t)(((J9VMThread*)targetEnv->getLanguageVMThread())->publicFlags & J9_PUBLIC_FLAGS_VM_ACCESS));
+//					abandonSurvivorTLHRemainder(targetEnv);
 				} else {
-					clearCache(currentEnv, cache);
-					if (flushCaches) {
-						/* it's unfortunate, but we cannot preserve remainders */
-						abandonSurvivorTLHRemainder(currentEnv);
-					}
+					clearCache(targetEnv, cache);
+//					if (flushCaches) {
+//						/* it's unfortunate, but we cannot preserve remainders */
+//						OMRPORT_ACCESS_FROM_ENVIRONMENT(currentEnv);
+//						omrtty_printf("handleInactiveSurvivorCopyScanCache currentEnv %llx targetEnv %llx vmaccess %zu about to abandonSurvivorTLHRemainder 2\n",
+//								currentEnv->getLanguageVMThread(), targetEnv->getLanguageVMThread(), (uintptr_t)(((J9VMThread*)targetEnv->getLanguageVMThread())->publicFlags & J9_PUBLIC_FLAGS_VM_ACCESS));
+//						abandonSurvivorTLHRemainder(targetEnv);
+//					}
 				}
 				/* notify is only needed by the end of concurrent phase */
+//				OMRPORT_ACCESS_FROM_ENVIRONMENT(currentEnv);
+//				omrtty_printf("handleInactiveSurvivorCopyScanCache currentEnv %llx targetEnv %llx vmaccess %zu about to notify\n",
+//						currentEnv->getLanguageVMThread(), targetEnv->getLanguageVMThread(), (uintptr_t)(((J9VMThread*)targetEnv->getLanguageVMThread())->publicFlags & J9_PUBLIC_FLAGS_VM_ACCESS));
 				addCacheEntryToScanListAndNotify(targetEnv, cache);
 			}
 		}
@@ -5092,6 +5225,15 @@ MM_Scavenger::handleSurvivorCopyScanCache(MM_EnvironmentStandard *currentEnv, MM
 				targetEnv->_scavengerStats._releaseScanListCount += 1;
 #endif /* J9MODRON_TGC_PARALLEL_STATISTICS */
 				clearCache(targetEnv, cache);
+//				if (final) {
+//					OMRPORT_ACCESS_FROM_ENVIRONMENT(currentEnv);
+//					omrtty_printf("handleSurvivorCopyScanCache currentEnv %llx targetEnv %llx vmaccess %zu about to abandonSurvivorTLHRemainder\n",
+//							currentEnv->getLanguageVMThread(), targetEnv->getLanguageVMThread(), (uintptr_t)(((J9VMThread*)targetEnv->getLanguageVMThread())->publicFlags & J9_PUBLIC_FLAGS_VM_ACCESS));
+//					abandonSurvivorTLHRemainder(targetEnv);
+//				}
+//				OMRPORT_ACCESS_FROM_ENVIRONMENT(currentEnv);
+//				omrtty_printf("handleSurvivorCopyScanCache currentEnv %llx targetEnv %llx vmaccess %zu about to notify\n",
+//						currentEnv->getLanguageVMThread(), targetEnv->getLanguageVMThread(), (uintptr_t)(((J9VMThread*)targetEnv->getLanguageVMThread())->publicFlags & J9_PUBLIC_FLAGS_VM_ACCESS));
 				addCacheEntryToScanListAndNotify(targetEnv, cache);
 			} else {
 				/* If it's an intermediate release (mutator threads releasing VM access in a middle of concurrent cycle), and high parallelism,
@@ -5125,13 +5267,23 @@ MM_Scavenger::handleInactiveTenureCopyScanCache(MM_EnvironmentStandard *currentE
 					 * since the mutator thread does not have VM access and we won't race it
 					 */
 					clearCache(targetEnv, cache);
+//					OMRPORT_ACCESS_FROM_ENVIRONMENT(currentEnv);
+//					omrtty_printf("handleInactiveTenureCopyScanCache currentEnv %llx targetEnv %llx vmaccess %zu about to abandonTenureTLHRemainder 1\n",
+//							currentEnv->getLanguageVMThread(), targetEnv->getLanguageVMThread(), (uintptr_t)(((J9VMThread*)targetEnv->getLanguageVMThread())->publicFlags & J9_PUBLIC_FLAGS_VM_ACCESS));
+//											abandonTenureTLHRemainder(targetEnv, true);
 				} else {
-					clearCache(currentEnv, cache);
-					if (flushCaches) {
-						/* it's unfortunate, but we cannot preserve remainders */
-						abandonTenureTLHRemainder(currentEnv, false);
-					}
+					clearCache(targetEnv, cache);
+//					if (flushCaches) {
+//						/* it's unfortunate, but we cannot preserve remainders */
+////						OMRPORT_ACCESS_FROM_ENVIRONMENT(currentEnv);
+////						omrtty_printf("handleInactiveTenureCopyScanCache currentEnv %llx targetEnv %llx vmaccess %zu about to abandonTenureTLHRemainder 2\n",
+////								currentEnv->getLanguageVMThread(), targetEnv->getLanguageVMThread(), (uintptr_t)(((J9VMThread*)targetEnv->getLanguageVMThread())->publicFlags & J9_PUBLIC_FLAGS_VM_ACCESS));
+//						abandonTenureTLHRemainder(targetEnv, true);
+//					}
 				}
+//				OMRPORT_ACCESS_FROM_ENVIRONMENT(currentEnv);
+//				omrtty_printf("handleInactiveTenureCopyScanCache currentEnv %llx targetEnv %llx vmaccess %zu about to notify\n",
+//						currentEnv->getLanguageVMThread(), targetEnv->getLanguageVMThread(), (uintptr_t)(((J9VMThread*)targetEnv->getLanguageVMThread())->publicFlags & J9_PUBLIC_FLAGS_VM_ACCESS));
 				addCacheEntryToScanListAndNotify(targetEnv, cache);
 			}
 			/* else we failed to push inactive cache since mutator thread reactivacted it -> concurrent cycle continues */
@@ -5161,6 +5313,15 @@ MM_Scavenger::handleTenureCopyScanCache(MM_EnvironmentStandard *currentEnv, MM_E
 				targetEnv->_scavengerStats._releaseScanListCount += 1;
 #endif /* J9MODRON_TGC_PARALLEL_STATISTICS */
 				clearCache(targetEnv, cache);
+//				if (final) {
+//					OMRPORT_ACCESS_FROM_ENVIRONMENT(currentEnv);
+//					omrtty_printf("handleTenureCopyScanCache currentEnv %llx targetEnv %llx vmaccess %zu about to abandonSurvivorTLHRemainder\n",
+//							currentEnv->getLanguageVMThread(), targetEnv->getLanguageVMThread(), (uintptr_t)(((J9VMThread*)targetEnv->getLanguageVMThread())->publicFlags & J9_PUBLIC_FLAGS_VM_ACCESS));
+//					abandonTenureTLHRemainder(targetEnv, true);
+//				}
+//				OMRPORT_ACCESS_FROM_ENVIRONMENT(currentEnv);
+//				omrtty_printf("handleTenureCopyScanCache currentEnv %llx targetEnv %llx vmaccess %zu about to notify\n",
+//						currentEnv->getLanguageVMThread(), targetEnv->getLanguageVMThread(), (uintptr_t)(((J9VMThread*)targetEnv->getLanguageVMThread())->publicFlags & J9_PUBLIC_FLAGS_VM_ACCESS));
 				addCacheEntryToScanListAndNotify(targetEnv, cache);
 			} else {
 				/* If it's an intermediate release (mutator threads releasing VM access in a middle of concurrent phase), and high parallelism,
@@ -5190,6 +5351,9 @@ MM_Scavenger::handleInactiveDeferredCopyScanCache(MM_EnvironmentStandard *curren
 #if defined(J9MODRON_TGC_PARALLEL_STATISTICS)
 				targetEnv->_scavengerStats._releaseScanListCount += 1;
 #endif /* J9MODRON_TGC_PARALLEL_STATISTICS */
+//				OMRPORT_ACCESS_FROM_ENVIRONMENT(currentEnv);
+//				omrtty_printf("handleInactiveDeferredCopyScanCache currentEnv %llx targetEnv %llx vmaccess %zu about to notify\n",
+//						currentEnv->getLanguageVMThread(), targetEnv->getLanguageVMThread(), (uintptr_t)(((J9VMThread*)targetEnv->getLanguageVMThread())->publicFlags & J9_PUBLIC_FLAGS_VM_ACCESS));
 				addCacheEntryToScanListAndNotify(targetEnv, cache);
 			}
 			/* else we failed to push inactive cache since mutator thread reactivacted it -> concurrent cycle continues */
@@ -5217,6 +5381,9 @@ MM_Scavenger::handleDeferredCopyScanCache(MM_EnvironmentStandard *currentEnv, MM
 #if defined(J9MODRON_TGC_PARALLEL_STATISTICS)
 					targetEnv->_scavengerStats._releaseScanListCount += 1;
 #endif /* J9MODRON_TGC_PARALLEL_STATISTICS */
+//					OMRPORT_ACCESS_FROM_ENVIRONMENT(currentEnv);
+//					omrtty_printf("handleDeferredCopyScanCache currentEnv %llx targetEnv %llx vmaccess %zu about to notify\n",
+//							currentEnv->getLanguageVMThread(), targetEnv->getLanguageVMThread(), (uintptr_t)(((J9VMThread*)targetEnv->getLanguageVMThread())->publicFlags & J9_PUBLIC_FLAGS_VM_ACCESS));
 					addCacheEntryToScanListAndNotify(targetEnv, cache);
 				} else {
 					Assert_MM_true(NULL == targetEnv->_inactiveDeferredCopyCache);
@@ -5257,11 +5424,18 @@ MM_Scavenger::threadReleaseCaches(MM_EnvironmentBase *currentEnvBase, MM_Environ
 			currentEnv = MM_EnvironmentStandard::getEnvironment(currentEnvBase);
 		}
 
+//		OMRPORT_ACCESS_FROM_ENVIRONMENT(currentEnv);
+//		omrtty_printf("threadReleaseCaches _currentEnv %llx targetEnv %llx flush %zu final %zu\n",
+//				currentEnv->getLanguageVMThread(), targetEnv->getLanguageVMThread(), (uintptr_t)flushCaches, (uintptr_t)final);
+
 		if (NULL != targetEnv->_deferredScanCache) {
 			Assert_MM_true(MUTATOR_THREAD != targetEnv->getThreadType());
 #if defined(J9MODRON_TGC_PARALLEL_STATISTICS)
 			targetEnv->_scavengerStats._releaseScanListCount += 1;
 #endif /* J9MODRON_TGC_PARALLEL_STATISTICS */
+//			OMRPORT_ACCESS_FROM_ENVIRONMENT(currentEnv);
+//			omrtty_printf("threadReleaseCaches _currentEnv %llx targetEnv %llx pushing deferred cache without notify\n",
+//					currentEnv->getLanguageVMThread(), targetEnv->getLanguageVMThread());
 			_scavengeCacheScanList.pushCache(targetEnv, targetEnv->_deferredScanCache);
 			targetEnv->_deferredScanCache = NULL;
 		}
@@ -5278,7 +5452,12 @@ MM_Scavenger::threadReleaseCaches(MM_EnvironmentBase *currentEnvBase, MM_Environ
 			 * keep copy cache remainders around (do not abandon yet), to be reused if the threads re-acquires VM access during the same CS cycle.
 			 * For final release, we abondon ever remainders.
 			 */
+//			OMRPORT_ACCESS_FROM_ENVIRONMENT(currentEnv);
+//			omrtty_printf("threadReleaseCaches final currentEnv %llx targetEnv %llx about to abandonSurvivorTLHRemainder\n",
+//					currentEnv->getLanguageVMThread(), targetEnv->getLanguageVMThread());
 			abandonSurvivorTLHRemainder(targetEnv);
+//			omrtty_printf("threadReleaseCaches final currentEnv %llx targetEnv %llx about to abandonTenureTLHRemainder\n",
+//					currentEnv->getLanguageVMThread(), targetEnv->getLanguageVMThread());
 			abandonTenureTLHRemainder(targetEnv, true);
 		}
 	}
@@ -5379,6 +5558,9 @@ MM_Scavenger::workThreadProcessRoots(MM_EnvironmentStandard *env)
 	 * This is important to do only for GC threads that will not be used in concurrent phase, but at this point
 	 * we don't know which threads Scheduler will not use, so we do it for every thread.
 	 */
+//	OMRPORT_ACCESS_FROM_ENVIRONMENT(env);
+//	omrtty_printf("workThreadProcessRoots %llx about to threadReleaseCaches\n",	env->getLanguageVMThread());
+	// this method is primarily for mutators, and is overkill for GC threads; for example GC threads cannot have inactive copy caches
 	threadReleaseCaches(env, env, true, true);
 
 	mergeThreadGCStats(env);
@@ -5400,6 +5582,8 @@ MM_Scavenger::workThreadScan(MM_EnvironmentStandard *env)
 	 * Most of the time, STW phase will have a superset of GC threads, so they could just resume the work on their own caches,
 	 * but this is not 100% guarantied (the control of what threads are inolved is in Dispatcher's domain).
 	 */
+//	OMRPORT_ACCESS_FROM_ENVIRONMENT(env);
+//	omrtty_printf("workThreadScan %llx about to threadReleaseCaches\n",	env->getLanguageVMThread());
 	threadReleaseCaches(env, env, true, true);
 
 	mergeThreadGCStats(env);
@@ -5417,6 +5601,9 @@ MM_Scavenger::workThreadComplete(MM_EnvironmentStandard *env)
 
 	MM_ScavengerRootScanner rootScanner(env, this);
 
+	/* With Exhaustive Scan Queue Termination, and no aborts, calling completeScan() is unnecessary. It should not find any work,
+	 * but it will impose an implicit sync point.
+	 */
 	/* Complete scan loop regardless if we already aborted. If so, the scan operation will just fix up pointers that still point to forwarded objects.
 	 * This is important particularly for Tenure space where recovery procedure will not walk the Tenure space for exhaustive fixup.
 	 */
@@ -5609,6 +5796,8 @@ concurrentScavengerAsyncCallbackHandler(OMR_VMThread *omrVMThread)
 	MM_GCExtensionsBase *ext = env->getExtensions();
 
 	if (ext->isConcurrentScavengerInProgress()) {
+//		OMRPORT_ACCESS_FROM_ENVIRONMENT(env);
+//		omrtty_printf("AsyncCallbackHandler env %llx\n", env->getLanguageVMThread());
 		ext->scavenger->threadReleaseCaches(env, env, true, false);
 	}
 }
