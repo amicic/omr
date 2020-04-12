@@ -948,17 +948,35 @@ MM_Scavenger::activateSurvivorCopyScanCache(MM_EnvironmentStandard *env)
 		/* racing with a GC thread that detected work queue depletion, which may try to flush the cache to generate more concurrent work */
 		if ((uintptr_t)cache == MM_AtomicOperations::lockCompareExchange((volatile uintptr_t *)&env->_inactiveSurvivorCopyScanCache, (uintptr_t)cache, (uintptr_t)NULL)) {
 			/* succeded activating */
+//
+//			OMRPORT_ACCESS_FROM_ENVIRONMENT(env);
+//			omrtty_printf("activating survivorCopyScanCache vmThread %llx flags %llx alloc/top %llx/%llx _survivorTLHRemainderBase/Top %llx/%llx inNative %d\n",
+//					env->getLanguageVMThread(),
+//					((J9VMThread *)env->getLanguageVMThread())->publicFlags,
+//					cache->cacheAlloc, cache->cacheTop,
+//					env->_survivorTLHRemainderBase, env->_survivorTLHRemainderTop, env->inNative());
+//
 			Assert_MM_true(NULL == env->_survivorCopyScanCache);
 			Assert_MM_true(0 != (cache->flags & OMR_SCAVENGER_CACHE_TYPE_CLEARED));
 			cache->flags &= ~OMR_SCAVENGER_CACHE_TYPE_CLEARED;
 			Assert_MM_true(env->_survivorTLHRemainderBase == cache->cacheAlloc);
 			Assert_MM_true(env->_survivorTLHRemainderTop == cache->cacheTop);
 			env->_survivorTLHRemainderBase = NULL;
+            if (0 == rand() % 10) {
+                    omrthread_sleep(1);
+            }
 			env->_survivorTLHRemainderTop = NULL;
 			env->_survivorCopyScanCache = cache;
 			activateDeferredCopyScanCache(env);
 			/* Force slow path release VM access, to be able to push mutator copy caches to scanning and reliable tell if thread is inactive */
 			env->forceOutOfLineVMAccess();
+
+//			omrtty_printf("activated survivorCopyScanCache vmThread %llx flags %llx alloc/top %llx/%llx _survivorTLHRemainderBase/Top %llx/%llx inNative %d\n",
+//					env->getLanguageVMThread(),
+//					((J9VMThread *)env->getLanguageVMThread())->publicFlags,
+//					cache->cacheAlloc, cache->cacheTop,
+//					env->_survivorTLHRemainderBase, env->_survivorTLHRemainderTop, env->inNative());
+
 			return true;
 		}
 	}
@@ -976,17 +994,36 @@ MM_Scavenger::activateTenureCopyScanCache(MM_EnvironmentStandard *env)
 		/* racing with a GC thread that detected work queue depletion, which may try to flush the cache to generate more concurrent work */
 		if ((uintptr_t)cache == MM_AtomicOperations::lockCompareExchange((volatile uintptr_t *)&env->_inactiveTenureCopyScanCache, (uintptr_t)cache, (uintptr_t)NULL)) {
 			/* succeded activating */
+
+//			OMRPORT_ACCESS_FROM_ENVIRONMENT(env);
+//			omrtty_printf("activating tenureCopyScanCache vmThread %llx flags %llx alloc/top %llx/%llx _tenureTLHRemainderBase/Top %llx/%llx inNative %d\n",
+//					env->getLanguageVMThread(),
+//					((J9VMThread *)env->getLanguageVMThread())->publicFlags,
+//					cache->cacheAlloc, cache->cacheTop,
+//					env->_tenureTLHRemainderBase, env->_tenureTLHRemainderBase, env->inNative());
+
 			Assert_MM_true(NULL == env->_tenureCopyScanCache);
 			Assert_MM_true(0 != (cache->flags & OMR_SCAVENGER_CACHE_TYPE_CLEARED));
 			cache->flags &= ~OMR_SCAVENGER_CACHE_TYPE_CLEARED;
 			Assert_MM_true(env->_tenureTLHRemainderBase == cache->cacheAlloc);
 			Assert_MM_true(env->_tenureTLHRemainderTop == cache->cacheTop);
 			env->_tenureTLHRemainderBase = NULL;
+            if (0 == rand() % 10) {
+                    omrthread_sleep(1);
+            }
 			env->_tenureTLHRemainderTop = NULL;
 			env->_tenureCopyScanCache = cache;
 			activateDeferredCopyScanCache(env);
 			/* Force slow path release VM access, to be able to push mutator copy caches to scanning and reliable tell if thread is inactive */
 			env->forceOutOfLineVMAccess();
+
+//			omrtty_printf("activated tenureCopyScanCache vmThread %llx flags %llx alloc/top %llx/%llx _tenureTLHRemainderBase/Top %llx/%llx inNative %d\n",
+//					env->getLanguageVMThread(),
+//					((J9VMThread *)env->getLanguageVMThread())->publicFlags,
+//					cache->cacheAlloc, cache->cacheTop,
+//					env->_tenureTLHRemainderBase, env->_tenureTLHRemainderTop, env->inNative());
+
+
 			return true;
 		}
 	}
@@ -1041,11 +1078,18 @@ retry:
 			}
 			/* try to use TLH remainder from previous discard */
 			if (((uintptr_t)env->_survivorTLHRemainderTop - (uintptr_t)env->_survivorTLHRemainderBase) >= cacheSize) {
+//				OMRPORT_ACCESS_FROM_ENVIRONMENT(env);
+//							omrtty_printf("reserveMemoryForAllocateInSemiSpace vmThread %llx  consuming remainder _survivorTLHRemainderBase/Top %llx/%llx\n",
+//									env->getLanguageVMThread(),
+//									env->_survivorTLHRemainderBase, env->_survivorTLHRemainderTop);
 				allocateResult = true;
 				addrBase = env->_survivorTLHRemainderBase;
 				addrTop = env->_survivorTLHRemainderTop;
 				Assert_MM_true(NULL != env->_survivorTLHRemainderBase);
 				env->_survivorTLHRemainderBase = NULL;
+	            if (0 == rand() % 10) {
+	                    omrthread_sleep(1);
+	            }
 				Assert_MM_true(NULL != env->_survivorTLHRemainderTop);
 				env->_survivorTLHRemainderTop = NULL;
 				activateDeferredCopyScanCache(env);
@@ -1161,6 +1205,9 @@ retry:
 				satisfiedInLOA = env->_loaAllocation;
 				Assert_MM_true(NULL != env->_tenureTLHRemainderBase);
 				env->_tenureTLHRemainderBase = NULL;
+	            if (0 == rand() % 10) {
+	                    omrthread_sleep(1);
+	            }
 				Assert_MM_true(NULL != env->_tenureTLHRemainderTop);
 				env->_tenureTLHRemainderTop = NULL;
 				env->_loaAllocation = false;
@@ -3244,6 +3291,8 @@ MM_Scavenger::clearCache(MM_EnvironmentStandard *env, MM_CopyScanCacheStandard *
 	Assert_MM_false(cache->flags & OMR_SCAVENGER_CACHE_TYPE_CLEARED);
 	bool remainderCreated = false;
 
+//	OMRPORT_ACCESS_FROM_ENVIRONMENT(env);
+
 	if (0 < discardSize) {
 		if (cache->flags & OMR_SCAVENGER_CACHE_TYPE_TENURESPACE) {
 			allocSubSpace = _tenureMemorySubSpace;
@@ -3252,26 +3301,60 @@ MM_Scavenger::clearCache(MM_EnvironmentStandard *env, MM_CopyScanCacheStandard *
 				/* Abandon the current entry in the cache */
 				allocSubSpace->abandonHeapChunk(cache->cacheAlloc, cache->cacheTop);
 			} else {
+//				if (env->inNative()) {
+//					omrtty_printf("clearCache vmThread %llx creating tenure remainder %llx/%llx inNative %d\n",
+//							env->getLanguageVMThread(), cache->cacheAlloc, cache->cacheTop, env->inNative());
+//					omrthread_sleep(1);
+//				}
 				remainderCreated = true;
 				env->_scavengerStats._tenureTLHRemainderCount += 1;
 				Assert_MM_true(NULL == env->_tenureTLHRemainderBase);
 				env->_tenureTLHRemainderBase = cache->cacheAlloc;
+	            if (0 == rand() % 10) {
+//					OMRPORT_ACCESS_FROM_ENVIRONMENT(env);
+//					omrtty_printf("clearCache tenure vmThread %llx cache %llx externalCaller %d\n",
+//							env->getLanguageVMThread(), cache, externalCaller);
+                    omrthread_sleep(1);
+	            }
 				Assert_MM_true(NULL == env->_tenureTLHRemainderTop);
 				env->_tenureTLHRemainderTop = cache->cacheTop;
 				env->_loaAllocation = (OMR_SCAVENGER_CACHE_TYPE_LOA == (cache->flags & OMR_SCAVENGER_CACHE_TYPE_LOA));
+//				if (env->inNative()) {
+//					omrtty_printf("clearCache vmThread %llx created _tenureTLHRemainderBase/Top %llx/%llx inNative %d\n",
+//							env->getLanguageVMThread(), env->_tenureTLHRemainderBase, env->_tenureTLHRemainderTop, env->inNative());
+//				}
 			}
 		} else if (cache->flags & OMR_SCAVENGER_CACHE_TYPE_SEMISPACE) {
 			allocSubSpace = _survivorMemorySubSpace;
 			if (discardSize < env->getExtensions()->tlhSurvivorDiscardThreshold) {
 				env->_scavengerStats._flipDiscardBytes += discardSize;
+//				omrtty_printf("clearCache vmThread %llx abandoning  survivor cacheAlloc/Top %llx/%llx (remainder %llx/%llx)\n",
+//						env->getLanguageVMThread(), cache->cacheAlloc, cache->cacheTop,
+//						env->_survivorTLHRemainderBase, env->_survivorTLHRemainderTop);
 				allocSubSpace->abandonHeapChunk(cache->cacheAlloc, cache->cacheTop);
 			} else {
+//				if (env->inNative()) {
+//					omrtty_printf("clearCache vmThread %llx creating survivor remainder %llx/%llx inNative %d\n",
+//							env->getLanguageVMThread(), cache->cacheAlloc, cache->cacheTop, env->inNative());
+//					omrthread_sleep(1);
+//				}
 				remainderCreated = true;
 				env->_scavengerStats._survivorTLHRemainderCount += 1;
 				Assert_MM_true(NULL == env->_survivorTLHRemainderBase);
 				env->_survivorTLHRemainderBase = cache->cacheAlloc;
+	            if (0 == rand() % 10) {
+//					OMRPORT_ACCESS_FROM_ENVIRONMENT(env);
+//					omrtty_printf("clearCache survivor vmThread %llx cache %llx externalCaller %d\n",
+//							env->getLanguageVMThread(), cache, externalCaller);
+                    omrthread_sleep(1);
+	            }
 				Assert_MM_true(NULL == env->_survivorTLHRemainderTop);
 				env->_survivorTLHRemainderTop = cache->cacheTop;
+//				if (env->inNative()) {
+//					omrtty_printf("clearCache vmThread %llx created _survivorTLHRemainderBase/Top %llx/%llx inNative %d\n",
+//							env->getLanguageVMThread(), env->_survivorTLHRemainderBase, env->_survivorTLHRemainderTop, env->inNative());
+//				}
+
 			}
 		} else {
 			/*
@@ -3281,6 +3364,11 @@ MM_Scavenger::clearCache(MM_EnvironmentStandard *env, MM_CopyScanCacheStandard *
 			 */
 			Assert_MM_unreachable();
 		}
+	} else {
+//		omrtty_printf("clearCache vmThread %llx discardSize is 0  survivor cacheAlloc/Top %llx/%llx remainder %llx/%llx\n",
+//				env->getLanguageVMThread(), cache->cacheAlloc, cache->cacheTop,
+//				env->_survivorTLHRemainderBase, env->_survivorTLHRemainderTop);
+
 	}
 
 	/* Broadcast details of that portion of memory within which objects have been allocated */
@@ -3297,11 +3385,29 @@ MM_Scavenger::abandonSurvivorTLHRemainder(MM_EnvironmentStandard *env)
 {
 	if (NULL != env->_survivorTLHRemainderBase) {
 		Assert_MM_true(NULL != env->_survivorTLHRemainderTop);
+//		OMRPORT_ACCESS_FROM_ENVIRONMENT(env);
+//		omrtty_printf("abandonSurvivorTLHRemainder start vmThread %llx _survivorTLHRemainderBase/Top %llx/%llx\n",
+//				env->getLanguageVMThread(), env->_survivorTLHRemainderBase, env->_survivorTLHRemainderTop);
+
 		env->_scavengerStats._flipDiscardBytes += (uintptr_t)env->_survivorTLHRemainderTop - (uintptr_t)env->_survivorTLHRemainderBase;
 		_survivorMemorySubSpace->abandonHeapChunk(env->_survivorTLHRemainderBase, env->_survivorTLHRemainderTop);
 		env->_survivorTLHRemainderBase = NULL;
+        if (0 == rand() % 10) {
+                omrthread_sleep(1);
+        }
+		Assert_MM_true(NULL != env->_survivorTLHRemainderTop);
 		env->_survivorTLHRemainderTop = NULL;
+
+//		omrtty_printf("abandonSurvivorTLHRemainder stop vmThread %llx _survivorTLHRemainderBase/Top %llx/%llx\n",
+//				env->getLanguageVMThread(), env->_survivorTLHRemainderBase, env->_survivorTLHRemainderTop);
+
 	} else {
+        if (0 == rand() % 30) {
+                omrthread_sleep(1);
+//				OMRPORT_ACCESS_FROM_ENVIRONMENT(env);
+//				omrtty_printf("abandonSurvivorTLHRemainder vmThread %llx _survivorTLHRemainderBase/Top %llx/%llx inNative %d\n",
+//						env->getLanguageVMThread(), env->_survivorTLHRemainderBase, env->_survivorTLHRemainderTop, env->inNative());
+        }
 		Assert_MM_true(NULL == env->_survivorTLHRemainderTop);
 	}
 }
@@ -3311,11 +3417,19 @@ MM_Scavenger::abandonTenureTLHRemainder(MM_EnvironmentStandard *env, bool preser
 {
 	if (NULL != env->_tenureTLHRemainderBase) {
 		Assert_MM_true(NULL != env->_tenureTLHRemainderTop);
+//		OMRPORT_ACCESS_FROM_ENVIRONMENT(env);
+//		omrtty_printf("abandonTenureTLHRemainder start vmThread %llx _tenureTLHRemainderBase/Top %llx/%llx\n",
+//				env->getLanguageVMThread(), env->_tenureTLHRemainderBase, env->_tenureTLHRemainderTop);
+
 		_tenureMemorySubSpace->abandonHeapChunk(env->_tenureTLHRemainderBase, env->_tenureTLHRemainderTop);
 
 		if (!preserveRemainders){
 			env->_scavengerStats._tenureDiscardBytes += (uintptr_t)env->_tenureTLHRemainderTop - (uintptr_t)env->_tenureTLHRemainderBase;
 			env->_tenureTLHRemainderBase = NULL;
+            if (0 == rand() % 10) {
+                    omrthread_sleep(1);
+            }
+    		Assert_MM_true(NULL != env->_tenureTLHRemainderTop);
 			env->_tenureTLHRemainderTop = NULL;
 		}
 		/* In case of Mutator threads (for concurrent scavenger) isMasterThread() is not sufficient, we must also make a thread check with getThreadType()*/
@@ -3323,7 +3437,17 @@ MM_Scavenger::abandonTenureTLHRemainder(MM_EnvironmentStandard *env, bool preser
 			saveMasterThreadTenureTLHRemainders(env);
 		}
 		env->_loaAllocation = false;
+
+//		omrtty_printf("abandonTenureTLHRemainder stop vmThread %llx _tenureTLHRemainderBase/Top %llx/%llx\n",
+//				env->getLanguageVMThread(), env->_tenureTLHRemainderBase, env->_tenureTLHRemainderTop);
+
 	} else {
+        if (0 == rand() % 30) {
+                omrthread_sleep(1);
+//				OMRPORT_ACCESS_FROM_ENVIRONMENT(env);
+//				omrtty_printf("abandonTenureTLHRemainder vmThread %llx _tenureTLHRemainderBase/Top %llx/%llx inNative %d\n",
+//						env->getLanguageVMThread(), env->_tenureTLHRemainderBase, env->_tenureTLHRemainderTop, env->inNative());
+        }
 		Assert_MM_true(NULL == env->_tenureTLHRemainderTop);
 	}
 }
@@ -5252,6 +5376,17 @@ MM_Scavenger::threadReleaseCaches(MM_EnvironmentBase *currentEnvBase, MM_Environ
 			currentEnv = MM_EnvironmentStandard::getEnvironment(getCurrentOMRVMThread(targetEnvBase->getOmrVM()));
 		} else {
 			currentEnv = MM_EnvironmentStandard::getEnvironment(currentEnvBase);
+		}
+
+//		if ((NULL != targetEnv->_survivorCopyScanCache) || (NULL != targetEnv->_tenureCopyScanCache)) {
+//			OMRPORT_ACCESS_FROM_ENVIRONMENT(currentEnv);
+//			omrtty_printf("threadReleaseCaches current/target vmThread %llx/%llx survivor %llx tenure %llx\n",
+//				currentEnv->getLanguageVMThread(), targetEnv->getLanguageVMThread(),
+//				targetEnv->_survivorCopyScanCache, targetEnv->_tenureCopyScanCache);
+//		}
+
+		if (!flushCaches && (0 == (rand() % 30))) {
+			omrthread_sleep(1);
 		}
 
 		if (NULL != targetEnv->_deferredScanCache) {
