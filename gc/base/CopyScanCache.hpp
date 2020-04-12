@@ -36,6 +36,7 @@
 #define OMR_SCAVENGER_CACHE_TYPE_CLEARED 32
 #define OMR_SCAVENGER_CACHE_TYPE_SCAN 64
 #define OMR_SCAVENGER_CACHE_TYPE_HEAP 128
+#define OMR_SCAVENGER_CACHE_TYPE_INACTIVE 256
 /* a mask which represents the flags which cannot change during the lifetime of a scan cache structure */
 #define OMR_SCAVENGER_CACHE_MASK_PERSISTENT (OMR_SCAVENGER_CACHE_TYPE_HEAP)
 /** @} */
