@@ -108,13 +108,6 @@ public:
 	 */
 	bool garbageCollect(MM_EnvironmentBase *env, MM_AllocateDescription *allocDescription);
 	
-	/**
-	 * Determine if the master GC thread is busy running a GC, or if it's idle.
-	 * 
-	 * @return true if a garbage collection is in progress
-	 */
-	bool isGarbageCollectInProgress() { return STATE_GC_REQUESTED != _masterThreadState; }
-	
 	MM_MasterGCThread(MM_EnvironmentBase *env);
 protected:
 private:

@@ -1516,7 +1516,7 @@ public:
 #if defined(OMR_GC_CONCURRENT_SCAVENGER)
 		, softwareRangeCheckReadBarrier(false)
 		, concurrentScavenger(false)
-		, concurrentScavengerForced(false)
+		, concurrentScavengerForced(true)
 		, concurrentScavengerHWSupport(false)
 		, concurrentScavengerBackgroundThreads(1)
 		, concurrentScavengerBackgroundThreadsForced(false)

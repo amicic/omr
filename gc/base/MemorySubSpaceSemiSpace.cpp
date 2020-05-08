@@ -88,8 +88,8 @@ MM_MemorySubSpaceSemiSpace::allocateObject(MM_EnvironmentBase *env, MM_AllocateD
 void *
 MM_MemorySubSpaceSemiSpace::allocationRequestFailed(MM_EnvironmentBase *env, MM_AllocateDescription *allocateDescription, AllocationType allocationType, MM_ObjectAllocationInterface *objectAllocationInterface, MM_MemorySubSpace *baseSubSpace, MM_MemorySubSpace *previousSubSpace)
 {
+//	OMRPORT_ACCESS_FROM_ENVIRONMENT(env);
 	Trc_MM_MSSSS_allocationRequestFailed_entry(env->getLanguageVMThread(), allocateDescription->getBytesRequested(), this, getName(), baseSubSpace, previousSubSpace, (uintptr_t)allocationType);
-
 	/* The baseSubSpace in this case isn't really valid - in the event of a scavenge, the baseSubSpace changes.  The current subSpace will become the
 	 * base for any restarts
 	 */
@@ -97,6 +97,7 @@ MM_MemorySubSpaceSemiSpace::allocationRequestFailed(MM_EnvironmentBase *env, MM_
 
 	allocateDescription->saveObjects(env);
 	if (!env->acquireExclusiveVMAccessForGC(_collector, true, true)) {
+//		omrtty_printf("MSSSS::allocationRequestFailed %llx lost first time\n", env->getLanguageVMThread());
 		allocateDescription->restoreObjects(env);
 		Trc_MM_MSSSS_allocationRequestFailed(env->getLanguageVMThread(), allocateDescription->getBytesRequested(), 1);
 		addr = allocateGeneric(env, allocateDescription, allocationType, objectAllocationInterface, _memorySubSpaceAllocate);
@@ -107,6 +108,7 @@ MM_MemorySubSpaceSemiSpace::allocationRequestFailed(MM_EnvironmentBase *env, MM_
 
 		allocateDescription->saveObjects(env);
 		if (!env->acquireExclusiveVMAccessForGC(_collector)) {
+//			omrtty_printf("MSSSS::allocationRequestFailed %llx lost second time\n", env->getLanguageVMThread());
 			allocateDescription->restoreObjects(env);
 			Trc_MM_MSSSS_allocationRequestFailed(env->getLanguageVMThread(), allocateDescription->getBytesRequested(), 2);
 			addr = allocateGeneric(env, allocateDescription, allocationType, objectAllocationInterface, _memorySubSpaceAllocate);
@@ -119,6 +121,7 @@ MM_MemorySubSpaceSemiSpace::allocationRequestFailed(MM_EnvironmentBase *env, MM_
 				return addr;
 			}
 			allocateDescription->saveObjects(env);
+//			omrtty_printf("MSSSS::allocationRequestFailed %llx about to request GC as a double loser\n", env->getLanguageVMThread());
 		}
 	}
 
@@ -585,6 +588,7 @@ MM_MemorySubSpaceSemiSpace::flip(MM_EnvironmentBase *env, Flip_step step)
 		_memorySubSpaceAllocate->isAllocatable(true);
 		getMemorySpace()->getTenureMemorySubSpace()->isAllocatable(true);
 
+		//non CS will clear this only at the start of new Scavenge Cycle. could we be consistent?
 		_extensions->setScavengerBackOutState(backOutFlagCleared);
 	}
 		break;

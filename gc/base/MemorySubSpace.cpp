@@ -987,6 +987,8 @@ MM_MemorySubSpace::garbageCollect(MM_EnvironmentBase* env, MM_AllocateDescriptio
 	/* If MMS has a collector call it.. */
 	if (_collector) {
 		if (_collector->forceKickoff(env, this, allocDescription, gcCode)) {
+			// this must be same Level as Entry otherwise it will mess up indentation
+			// not sure what Overhead is?!
 			Trc_MM_MemorySubSpace_garbageCollect_Exit4(env->getLanguageVMThread());
 			return false; /* forced kickoff activated */
 		}

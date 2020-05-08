@@ -363,6 +363,7 @@ void
 MM_Scavenger::masterSetupForGC(MM_EnvironmentStandard *env)
 {
 	/* Make sure the backout state is cleared */
+	//Assert_MM_true(_extensions->getScavengerBackOutState() == backOutFlagCleared);
 	setBackOutFlag(env, backOutFlagCleared);
 
 	_rescanThreadsForRememberedObjects = false;
@@ -1279,7 +1280,27 @@ MM_Scavenger::copyAndForward(MM_EnvironmentStandard *env, volatile omrobjectptr_
 				forwardHeader.copyOrWait(forwardPtr);
 				*objectPtrIndirect = forwardPtr;
 			} else {
-				omrobjectptr_t destinationObjectPtr = copy(env, &forwardHeader);
+				omrobjectptr_t destinationObjectPtr = NULL;
+
+//				if (env->_scanningThreadSlot) {
+//					OMRPORT_ACCESS_FROM_ENVIRONMENT(env);
+//					if (0 == (uint64_t)objectPtr % 48611) {
+//					if (0 == (uint64_t)objectPtr % 163841) {
+//					if ((0 == (uint64_t)objectPtr % 1223)
+//					if ((0 == (uint64_t)objectPtr % 3571)
+//							&& (MM_MasterGCThread::STATE_WAITING == _masterGCThread._masterThreadState)
+//							&& concurrent_phase_complete == _concurrentPhase) {
+////						omrtty_printf("copyAndForward threadSlot %zu master GC thread state %zu\n", env->_scanningThreadSlot, _masterGCThread._masterThreadState);
+////						omrtty_printf("copyAndForward master GC thread state %zu _concurrentPhase %zu\n", _masterGCThread._masterThreadState, _concurrentPhase);
+//						setBackOutFlag(env, backOutFlagRaised);
+//						//destinationObjectPtr = copy(env, &forwardHeader);
+//					} else
+					{
+						destinationObjectPtr = copy(env, &forwardHeader);
+					}
+//				} else {
+//					destinationObjectPtr = copy(env, &forwardHeader);
+//				}
 				if (NULL == destinationObjectPtr) {
 					/* Failure - the scavenger must back out the work it has done. */
 					/* raise the alert and return (true - must look like a new object was handled) */
@@ -3512,8 +3533,10 @@ MM_Scavenger::checkAndSetShouldYieldFlag(MM_EnvironmentStandard *env) {
 void
 MM_Scavenger::setBackOutFlag(MM_EnvironmentBase *env, BackOutState backOutState)
 {
+	//static const char *backOutFlagString[] = { "backOutFlagCleared", "backOutFlagRaised", "backOutStarted" };
 	/* Skip triggering of trace point and hook if we trying to set flag to true multiple times */
 	if (_extensions->getScavengerBackOutState() != backOutState) {
+		//Trc_MM_ScavengerBackout(env->getLanguageVMThread(), backOutFlagString[backOutState]);
 		_backOutDoneIndex = _doneIndex;
 		/* Ensure that other CPUs see correct _backOutDoneIndex, by the time they see _backOutFlag is set */
 		MM_AtomicOperations::writeBarrier();
@@ -4498,6 +4521,7 @@ MM_Scavenger::internalGarbageCollect(MM_EnvironmentBase *envBase, MM_MemorySubSp
 
 	bool shouldPercolate = _delegate.internalGarbageCollect_shouldPercolateGarbageCollect(env, & percolateReason, & gcCode);
 	if (shouldPercolate) {
+		// todo: add a trace point
 		bool didPercolate = percolateGarbageCollect(env, subSpace, NULL, percolateReason, gcCode);
 		/* Percolation must occur if required by the cli. */
 		if (didPercolate) {
@@ -4519,7 +4543,9 @@ MM_Scavenger::internalGarbageCollect(MM_EnvironmentBase *envBase, MM_MemorySubSp
 
 	_extensions->heap->getPercolateStats()->incrementScavengesSincePercolate();
 
+	// consider moving to masterThreadGarbageCollect and asserting _gcCount == _concurrentScavengerSwitchCount
 	_extensions->scavengerStats._gcCount += 1;
+
 	env->_cycleState->_activeSubSpace = subSpace;
 	_collectorExpandedSize = 0;
 
@@ -4558,6 +4584,9 @@ MM_Scavenger::internalGarbageCollect(MM_EnvironmentBase *envBase, MM_MemorySubSp
 bool
 MM_Scavenger::percolateGarbageCollect(MM_EnvironmentBase *env,  MM_MemorySubSpace *subSpace, MM_AllocateDescription *allocDescription, PercolateReason percolateReason, uint32_t gcCode)
 {
+	OMRPORT_ACCESS_FROM_OMRPORT(env->getPortLibrary());
+	omrtty_printf("Scavenger::percolateGarbageCollect start\n");
+
 #if defined(OMR_GC_CONCURRENT_SCAVENGER)
 	/* before doing percolate global, we have to complete potentially ongoing concurrent Scavenge cycle */
 	if (_extensions->concurrentScavenger && isConcurrentCycleInProgress()) {
@@ -4586,6 +4615,9 @@ MM_Scavenger::percolateGarbageCollect(MM_EnvironmentBase *env,  MM_MemorySubSpac
 	/* restore the cycle state to maintain symmetry */
 	Assert_MM_true(NULL == env->_cycleState);
 	env->_cycleState = scavengeCycleState;
+
+	omrtty_printf("Scavenger::percolateGarbageCollect end result %zu\n", (uintptr_t)result);
+
 	return result;
 }
 
@@ -4632,6 +4664,9 @@ MM_Scavenger::reportGCCycleStart(MM_EnvironmentStandard *env)
 	OMRPORT_ACCESS_FROM_ENVIRONMENT(env);
 	MM_CommonGCData commonData;
 
+	// maybe nursery free?
+	Trc_MM_CycleStart(env->getLanguageVMThread(), env->_cycleState->_type, _extensions->getHeap()->getActualFreeMemorySize());
+
 	TRIGGER_J9HOOK_MM_OMR_GC_CYCLE_START(
 		_extensions->omrHookInterface,
 		env->getOmrVMThread(),
@@ -4647,6 +4682,9 @@ MM_Scavenger::reportGCCycleEnd(MM_EnvironmentStandard *env)
 	OMRPORT_ACCESS_FROM_ENVIRONMENT(env);
 	MM_GCExtensionsBase* extensions = env->getExtensions();
 	MM_CommonGCData commonData;
+
+	// maybe nursery free?
+	Trc_MM_CycleEnd(env->getLanguageVMThread(), env->_cycleState->_type, _extensions->getHeap()->getActualFreeMemorySize());
 
 	TRIGGER_J9HOOK_MM_PRIVATE_GC_POST_CYCLE_END(
 		extensions->privateHookInterface,
@@ -5569,6 +5607,9 @@ MM_Scavenger::triggerConcurrentScavengerTransition(MM_EnvironmentBase *env, MM_A
 	/* STW phase is complete */
 
 	/* count every cycle start and cycle end transition */
+	// this should be equal to scavengerStats._gcCount, but it can advance ahead of gcCount, since
+	// triggerConcurrentScavengerTransition will be called when we want to percolate
+	// after which we will return from Scavenger::internalGarbageCollect without incrementing gcCount
 	_concurrentScavengerSwitchCount += 1;
 
 	/* Ensure switchConcurrentForThread is invoked for each mutator thread. It will be done indirectly,
@@ -5590,6 +5631,9 @@ MM_Scavenger::triggerConcurrentScavengerTransition(MM_EnvironmentBase *env, MM_A
 void
 MM_Scavenger::completeConcurrentCycle(MM_EnvironmentBase *env)
 {
+//	OMRPORT_ACCESS_FROM_OMRPORT(env->getPortLibrary());
+//	omrtty_printf("Scavenger::completeConcurrentCycle start\n");
+
 	/* this is supposed to be called by an external cycle (for example ConcurrentGC, STW phase)
 	 * that is just to be started, but cannot before Scavenger is complete */
 	Assert_MM_true(NULL == env->_cycleState);

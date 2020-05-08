@@ -359,6 +359,7 @@ MM_EnvironmentBase::isExclusiveAccessRequestWaiting()
 bool
 MM_EnvironmentBase::acquireExclusiveVMAccessForGC(MM_Collector *collector, bool failIfNotFirst, bool flushCaches)
 {
+//	OMRPORT_ACCESS_FROM_ENVIRONMENT(this);
 	MM_GCExtensionsBase *extensions = getExtensions();
 	uintptr_t collectorAccessCount = collector->getExclusiveAccessCount();
 
@@ -387,11 +388,21 @@ MM_EnvironmentBase::acquireExclusiveVMAccessForGC(MM_Collector *collector, bool 
 				if(NULL == extensions->gcExclusiveAccessThreadId) {
 					/* thread is the winner and will request the GC */
 					extensions->gcExclusiveAccessThreadId = _omrVMThread;
+//#define RAND_DEBUG 10
+//#if RAND_DEBUG
+//					// sleep to give other threads a chance to race and request ExclusiveVMAccess for GC
+//					if (0 == rand() % RAND_DEBUG) {
+//						omrthread_sleep(1);
+//					}
+//#endif
 				}
 				omrthread_monitor_exit(extensions->gcExclusiveAccessMutex);
+//				omrtty_printf("acquireExclusiveVMAccessForGC %llx won\n", getLanguageVMThread());
 			}
 
 			if(_omrVMThread != extensions->gcExclusiveAccessThreadId) {
+//				omrtty_printf("acquireExclusiveVMAccessForGC %llx lost to %llx\n",
+//						getLanguageVMThread(), extensions->gcExclusiveAccessThreadId->_language_vmthread);
 				/* thread was not the winner for requesting a GC - allow the GC to
 				 * proceed and wait for it to complete */
 				Assert_MM_true(NULL != extensions->gcExclusiveAccessThreadId);
@@ -404,7 +415,8 @@ MM_EnvironmentBase::acquireExclusiveVMAccessForGC(MM_Collector *collector, bool 
 				 * the thread sees that no more GCs are being requested.
 				 */
 				omrthread_monitor_enter(extensions->gcExclusiveAccessMutex);
-				while(NULL != extensions->gcExclusiveAccessThreadId) {
+				//while ((NULL != extensions->gcExclusiveAccessThreadId) || (extensions->getScavengerBackOutState() != backOutFlagRaised)) {
+				while (NULL != extensions->gcExclusiveAccessThreadId) {
 					omrthread_monitor_wait(extensions->gcExclusiveAccessMutex);
 				}
 
@@ -418,6 +430,8 @@ MM_EnvironmentBase::acquireExclusiveVMAccessForGC(MM_Collector *collector, bool 
 				}
 
 				/* thread can now win and will request a GC */
+//				omrtty_printf("acquireExclusiveVMAccessForGC %llx won after previously losing; scav backout %zu\n",
+//						getLanguageVMThread(), (uintptr_t)extensions->getScavengerBackOutState());
 				extensions->gcExclusiveAccessThreadId = _omrVMThread;
 
 				omrthread_monitor_exit(extensions->gcExclusiveAccessMutex);
@@ -442,6 +456,10 @@ MM_EnvironmentBase::acquireExclusiveVMAccessForGC(MM_Collector *collector, bool 
 	if (flushCaches) {
 		GC_OMRVMInterface::flushCachesForGC(this);
 	}
+
+//	omrtty_printf("acquireExclusiveVMAccessForGC %llx returning _exclusiveAccessBeatenByOtherThread %zu\n",
+//			getLanguageVMThread(), (uintptr_t)_exclusiveAccessBeatenByOtherThread);
+//
 
 	return !_exclusiveAccessBeatenByOtherThread;
 

@@ -1558,6 +1558,8 @@ MM_ParallelGlobalGC::reportGCCycleStart(MM_EnvironmentBase *env)
 	OMRPORT_ACCESS_FROM_ENVIRONMENT(env);
 	MM_CommonGCData commonData;
 
+	Trc_MM_CycleStart(env->getLanguageVMThread(), env->_cycleState->_type, _extensions->getHeap()->getActualFreeMemorySize());
+
 	TRIGGER_J9HOOK_MM_OMR_GC_CYCLE_START(
 		_extensions->omrHookInterface,
 		env->getOmrVMThread(),
@@ -1572,6 +1574,8 @@ MM_ParallelGlobalGC::reportGCCycleEnd(MM_EnvironmentBase *env)
 {
 	OMRPORT_ACCESS_FROM_ENVIRONMENT(env);
 	MM_CommonGCData commonData;
+
+	Trc_MM_CycleEnd(env->getLanguageVMThread(), env->_cycleState->_type, _extensions->getHeap()->getActualFreeMemorySize());
 
 	TRIGGER_J9HOOK_MM_PRIVATE_GC_POST_CYCLE_END(
 		_extensions->privateHookInterface,
