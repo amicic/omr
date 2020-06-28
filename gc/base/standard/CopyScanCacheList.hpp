@@ -51,7 +51,7 @@ class MM_CopyScanCacheList : public MM_BaseVirtual
 	/*
 	 * Data members
 	 */
-private:
+public:
 	bool _allocationInHeap;	/**< set if scan cache headers allocated in Heap */
 
 	struct CopyScanCacheSublist {

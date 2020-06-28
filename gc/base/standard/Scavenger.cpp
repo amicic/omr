@@ -912,6 +912,10 @@ MM_Scavenger::calculateCopyScanCacheSizeForQueueLength(uintptr_t maxCacheSize, u
 MMINLINE uintptr_t
 MM_Scavenger::calculateOptimumCopyScanCacheSize(MM_EnvironmentStandard *env)
 {
+//	if (MUTATOR_THREAD == env->getThreadType()) {
+//		return 1024;
+//	}
+//
 	uintptr_t threadCount = _dispatcher->threadCount();
 	uintptr_t maxCacheSize = _extensions->scavengerScanCacheMaximumSize;
 	uintptr_t cacheSize = maxCacheSize;
@@ -2041,14 +2045,27 @@ MM_Scavenger::shouldDoFinalNotify(MM_EnvironmentStandard *env)
 {
 #if defined(OMR_GC_CONCURRENT_SCAVENGER)
 	if (_extensions->concurrentScavengeExhaustiveTermination && isCurrentPhaseConcurrent() && !_scavengeCacheFreeList.areAllCachesReturned()) {
+//		OMRPORT_ACCESS_FROM_ENVIRONMENT(env);
 		
 		/* GC threads ran out of work, but not all copy caches are back to the global free pool. They are kept by mutator threads.
 		 * Activate Async Signal handler which will force Mutator threads to flush their copy caches for scanning. */
+//		omrtty_printf("shouldDoFinalNotify starting signaling caches %zu\n",
+//				_scavengeCacheFreeList._totalAllocatedEntryCount -_scavengeCacheFreeList.getApproximateEntryCount());
+//		uint64_t waitStartTime = omrtime_hires_clock();
 		_delegate.signalThreadsToFlushCaches(env);
+//		uint64_t waitEndTime = omrtime_hires_clock();
+//		omrtty_printf("shouldDoFinalNotify %zuus caches unreturned %zu in Q %zu\n",
+//				omrtime_hires_delta(waitStartTime, waitEndTime, OMRPORT_TIME_DELTA_IN_MICROSECONDS),
+//				_scavengeCacheFreeList._totalAllocatedEntryCount -_scavengeCacheFreeList.getApproximateEntryCount(),
+//				_scavengeCacheScanList.getApproximateEntryCount());
 
 		/* If no work has been created and no one requested to yeild meanwhile, go and wait for new work */
 		if (!checkAndSetShouldYieldFlag(env)) {
 			if (0 == _cachedEntryCount) {
+//				omrtty_printf("shouldDoFinalNotify about to sleep\n");
+//				if (0 == rand() % 10) {
+					omrthread_sleep(3);
+//				}
 				Assert_MM_true(!_scavengeCacheFreeList.areAllCachesReturned());
 
 				/* The only known reason for timeout is a rare case if Exclusive VM Access request came from a nonGC party. If we did not have a timeout,
@@ -5611,11 +5628,18 @@ void
 concurrentScavengerAsyncCallbackHandler(OMR_VMThread *omrVMThread)
 {
 	MM_EnvironmentStandard *env = MM_EnvironmentStandard::getEnvironment(omrVMThread);
+//	OMRPORT_ACCESS_FROM_OMRPORT(env->getPortLibrary());
 	MM_GCExtensionsBase *ext = env->getExtensions();
 
+//	uint64_t waitStartTime = omrtime_hires_clock();
 	if (ext->isConcurrentScavengerInProgress()) {
 		ext->scavenger->threadReleaseCaches(env, env, true, false);
 	}
+//	uint64_t waitEndTime = omrtime_hires_clock();
+//	uint64_t delta = omrtime_hires_delta(waitStartTime, waitEndTime, OMRPORT_TIME_DELTA_IN_MICROSECONDS);
+//	if (delta > 5) {
+//		omrtty_printf("AsyncHandler %zuus csInProgress %d\n", delta, ext->isConcurrentScavengerInProgress());
+//	}
 }
 
 } /* extern "C" */
