@@ -992,6 +992,20 @@ MM_MemorySubSpace::garbageCollect(MM_EnvironmentBase* env, MM_AllocateDescriptio
 		}
 
 		if (MM_GCCode(gcCode).isPercolateGC()) {
+			/* MM_EnvironmentBase::acquireExclusiveVMAccessForGC has a mechanism to ensure
+			 * that only one GC is triggered by a multiple mutators racing to acquire exclusive GC.
+			 * That mechanism works well, if original requested Collector is same.
+			 * However in percolate case, original Collector (for example Scavenge) and the actual performing collectors (for example Global) are not the same.
+			 * If original Collectors are different, but the actual performing collectors are same,
+			 * the mechanism will fail to prevent duplicate/unnecessary actual collections.
+			 * To help the mechanism deal with this, we will beside implicitly incrementing original Collector exclusive count,
+			 * also explicitly increment the count for the actually performing GC. It cannot be done earier, at acquire exclusive  point,
+			 * since we don't know yet, that the collector will actually percolate.
+			 * For example, this will help with the scenario where we have on one side concurrent global GC trying to perform final STW Global
+			 * and losing to initially acquire exclusive and on the other side Scavenge percolating to global GC and winning to initially acquire exclusive,
+			 * so that final STW Global does not ever get that exclusive (after percolate compliting), since its exclusive count changed, too.
+			 */
+			_collector->incrementExclusiveAccessCount();
 			reportPercolateCollect(env);
 		}
 		if (NULL != allocDescription) {
