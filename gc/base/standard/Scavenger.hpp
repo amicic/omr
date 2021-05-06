@@ -256,9 +256,11 @@ public:
 	 * Implementation of CopyAndForward for slotObject input format
 	 * @param slotObject input field in slotObject format
 	 */
-	MMINLINE bool copyAndForward(MM_EnvironmentStandard *env, GC_SlotObject *slotObject);
-
-	MMINLINE bool copyAndForward(MM_EnvironmentStandard *env, volatile omrobjectptr_t *objectPtrIndirect);
+	 
+	MMINLINE bool copyAndForwardSTW(MM_EnvironmentStandard *env, GC_SlotObject *slotObject);
+	MMINLINE bool copyAndForwardSTW(MM_EnvironmentStandard *env, volatile omrobjectptr_t *objectPtrIndirect);
+	MMINLINE bool copyAndForwardCS(MM_EnvironmentStandard *env, GC_SlotObject *slotObject);
+	MMINLINE bool copyAndForwardCS(MM_EnvironmentStandard *env, volatile omrobjectptr_t *objectPtrIndirect);
 
 	/**
 	 * Handle the path after a failed attempt to forward an object:
@@ -274,6 +276,7 @@ public:
 	 */	
 	MMINLINE void forwardingSucceeded(MM_EnvironmentStandard *env, MM_CopyScanCacheStandard *copyCache, void *newCacheAlloc, uintptr_t oldObjectAge, uintptr_t objectCopySizeInBytes, uintptr_t objectReserveSizeInBytes);
 
+	template <bool csEnabled>
 	MMINLINE omrobjectptr_t copy(MM_EnvironmentStandard *env, MM_ForwardedHeader* forwardedHeader);
 	
 	/* Flush remaining Copy Scan updates which would otherwise be discarded 
@@ -306,6 +309,7 @@ public:
 	 * @return Whether or not objectPtr should be remembered.
 	 */
 	MMINLINE bool scavengeObjectSlots(MM_EnvironmentStandard *env, MM_CopyScanCacheStandard *scanCache, omrobjectptr_t objectPtr, uintptr_t flags, omrobjectptr_t *rememberedSetSlot);
+	template <bool csEnabled>
 	MMINLINE MM_CopyScanCacheStandard *incrementalScavengeObjectSlots(MM_EnvironmentStandard *env, omrobjectptr_t objectPtr, MM_CopyScanCacheStandard* scanCache);	
 	
 	/**
