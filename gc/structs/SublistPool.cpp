@@ -208,6 +208,12 @@ MM_SublistPool::allocate(MM_EnvironmentBase *env, MM_SublistFragment *fragment)
 		Assert_MM_true(NULL == _allocPuddle->getNext());
 		_allocPuddle->setNext(emptyPuddle);
 	}
+	/* Make sure other threads/CPUs see cleared puddle and initialized pointers (in MM_SublistPuddle::initialize) before it's exposed
+	 * and threads start allocating fragments from it. Note however, that _allocPuddle is accessible for consumption outside
+	 * of this critical section (see the start of this method)!  We cannot rely on monitor exit to enforce clearing and initialization of this new puddle.
+	 * The last chance to do it is now.
+	 */
+	MM_AtomicOperations::writeBarrier();
 	_allocPuddle = emptyPuddle;
 	Assert_MM_true(NULL == _allocPuddle->getNext());
 

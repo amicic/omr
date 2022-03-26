@@ -60,6 +60,9 @@ MM_SublistPuddle::initialize(MM_EnvironmentBase *env, uintptr_t size, MM_Sublist
 	/* Remember the parent pool */
 	_parent = parent;
 
+	/* make sure other threads/CPUs see cleared puddle and initialized pointers before they start allocating fragments from this puddle */
+	//MM_AtomicOperations::writeBarrier();
+
 	return true;
 }
 
@@ -148,18 +151,6 @@ MM_SublistPuddle::allocateElementNoContention()
 }
 
 /**
- * Reset the puddle for list and backing store for consumption.
- * Fragments have an expectation that when allocated, the entries are NULL.  The backing store of a
- * puddle (the range from the base to the top pointer) is cleared.
- */
-void
-MM_SublistPuddle::reset()
-{
-	memset((void *)_listBase, 0, _size);
-	_listCurrent = _listBase;
-}
-
-/**
  * Merge a sublist puddle into the receiver.
  * Copy as many entries from the sourcePuddle into the receiver as can fit.  There is the possibility
  * that the sourcePuddle will not have all of its elements copied.  The routine guarantees that both
@@ -182,6 +173,8 @@ MM_SublistPuddle::merge(MM_SublistPuddle *sourcePuddle)
 	memcpy(_listCurrent, ((uint8_t *)sourcePuddle->_listCurrent) - copySize, copySize);
 	/* And clear the data from the source puddle (fragments require preinitialized slots) */
 	memset(((uint8_t *)sourcePuddle->_listCurrent) - copySize, 0, copySize);
+	// is barrier after compact enough?
+	//MM_AtomicOperations::writeBarrier();
 
 	/* Adjust the receiver and source puddle list pointers */
 	_listCurrent = (uintptr_t *) (((uint8_t *)_listCurrent) + copySize);

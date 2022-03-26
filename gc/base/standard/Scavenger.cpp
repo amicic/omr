@@ -2857,6 +2857,8 @@ MMINLINE void
 MM_Scavenger::flushRememberedSet(MM_EnvironmentStandard *env)
 {
 	if (0 != env->_scavengerRememberedSet.count) {
+		// make sure prune sees accurate puddles mutated by main scan
+		// MM_AtomicOperations::writeBarrier();
 		MM_SublistFragment::flush((J9VMGC_SublistFragment*)&env->_scavengerRememberedSet);
 	}
 }
@@ -3014,7 +3016,10 @@ MM_Scavenger::pruneRememberedSetList(MM_EnvironmentStandard *env)
 				}
 			} /* while non-null slots */
 		}
+		// make sure RS compact sees accurate puddles mutated by prune
+		// MM_AtomicOperations::writeBarrier();
 	}
+
 #if defined(OMR_SCAVENGER_TRACE_REMEMBERED_SET)
 	omrtty_printf("{SCAV: End prune remembered set list; count = %lld}\n", _extensions->rememberedSet.countElements());
 #endif /* OMR_SCAVENGER_TRACE_REMEMBERED_SET */
@@ -3136,6 +3141,9 @@ MM_Scavenger::scavengeRememberedSetList(MM_EnvironmentStandard *env)
 				remSetSlotIterator.removeSlot();
 			}
 		}
+
+		// make main scan (new remembering) sees accurate puddles mutated by removeSlot
+		// MM_AtomicOperations::writeBarrier();
 
 		Trc_MM_ParallelScavenger_scavengeRememberedSetList_donePuddle(env->getLanguageVMThread(), puddle, numElements);
 	}
@@ -4252,6 +4260,9 @@ MM_Scavenger::mainThreadGarbageCollect(MM_EnvironmentBase *envBase, MM_AllocateD
 
 			/* Merge sublists in the remembered set (if necessary) */
 			_extensions->rememberedSet.compact(env);
+			// make sure that mutators see accurate puddles mutated by compact
+			// this might not be needed since mutator acquireVMAccess has a readBarrier
+			// MM_AtomicOperations::writeBarrier();
 
 			/* If -Xgc:fvtest=forcePoisonEvacuate has been specified, poison(fill poison pattern) evacuate space */
 			if(_extensions->fvtest_forcePoisonEvacuate) {

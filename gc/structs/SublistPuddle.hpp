@@ -79,7 +79,6 @@ public:
 
 	bool allocate(MM_SublistFragment *fragment);
 	uintptr_t *allocateElementNoContention();
-	void reset();
 
 	MMINLINE bool isFull() { return _listCurrent == _listTop; }
 	MMINLINE bool isEmpty() { return _listCurrent == _listBase; }

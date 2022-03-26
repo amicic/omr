@@ -527,8 +527,6 @@ public:
 	MMINLINE void setRememberedSetOverflowState() { _extensions->setRememberedSetOverflowState(); }
 	MMINLINE void clearRememberedSetOverflowState() { _extensions->clearRememberedSetOverflowState(); }
 
-	/* Auto-remember stack objects so JIT can omit generational barriers */
-	void rescanThreadSlots(MM_EnvironmentStandard *env);
 	/**
 	 * Determine if the specified remembered object was referenced by a thread or stack.
 	 *

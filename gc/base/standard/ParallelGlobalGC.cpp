@@ -538,6 +538,9 @@ MM_ParallelGlobalGC::mainThreadGarbageCollect(MM_EnvironmentBase *env, MM_Alloca
 #if defined(OMR_GC_MODRON_SCAVENGER)
 	/* Merge sublists in the remembered set (if necessary) */
 	_extensions->rememberedSet.compact(env);
+	// make sure that mutators see accurate puddles mutated by compact
+	// this might not be needed since mutator acquireVMAccess has a readBarrier
+	// MM_AtomicOperations::writeBarrier();
 
 	_extensions->oldHeapSizeOnLastGlobalGC = _extensions->heap->getActiveMemorySize(MEMORY_TYPE_OLD);
 	_extensions->freeOldHeapSizeOnLastGlobalGC = _extensions->heap->getApproximateActiveFreeMemorySize(MEMORY_TYPE_OLD);
