@@ -1,5 +1,5 @@
 /*******************************************************************************
- * Copyright (c) 1991, 2021 IBM Corp. and others
+ * Copyright (c) 1991, 2022 IBM Corp. and others
  *
  * This program and the accompanying materials are made available under
  * the terms of the Eclipse Public License 2.0 which accompanies this
@@ -479,7 +479,7 @@ public:
 	 * The calling thread will release all levels (recursion) of its exclusive access request, and alert other threads that it has completed its
 	 * intended GC request.
 	 */
-	void unwindExclusiveVMAccessForGC();
+	void unwindExclusiveVMAccessForGC(omrobjectptr_t *objectPtrIndirect);
 
 	/**
 	 * Acquire exclusive VM access.

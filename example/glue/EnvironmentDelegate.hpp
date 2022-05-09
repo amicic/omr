@@ -1,5 +1,5 @@
 /*******************************************************************************
- * Copyright (c) 2017, 2020 IBM Corp. and others
+ * Copyright (c) 2017, 2022 IBM Corp. and others
  *
  * This program and the accompanying materials are made available under
  * the terms of the Eclipse Public License 2.0 which accompanies this
@@ -193,6 +193,9 @@ public:
 	 * @return true if another thread is waiting to acquire exclusive VM access
 	 */
 	bool isExclusiveAccessRequestWaiting();
+
+
+	bool isAnyHaltRequestWaiting() { return isExclusiveAccessRequestWaiting(); }
 
 	/**
 	 * Acquire exclusive VM access. This method should only be called by the OMR runtime to
