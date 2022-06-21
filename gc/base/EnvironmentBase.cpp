@@ -86,6 +86,9 @@ MM_EnvironmentBase::kill()
 bool
 MM_EnvironmentBase::initialize(MM_GCExtensionsBase *extensions)
 {
+	_cleanedCardTraceIndex = 0;
+	memset(_cleanedCardTrace, 0, sizeof(_cleanedCardTrace));
+
 	setEnvironmentId(MM_AtomicOperations::add(&extensions->currentEnvironmentCount, 1) - 1);
 	setAllocationColor(extensions->newThreadAllocationColor);
 

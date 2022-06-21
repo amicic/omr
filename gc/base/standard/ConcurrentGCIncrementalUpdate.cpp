@@ -1190,6 +1190,10 @@ MM_ConcurrentGCIncrementalUpdate::cleanCards(MM_EnvironmentBase *env, bool isMut
 void
 MM_ConcurrentGCIncrementalUpdate::finalCleanCards(MM_EnvironmentBase *env)
 {
+	Trc_MM_ConcurrentCollectionCardCleaningStart(env->getLanguageVMThread(),
+			_stats.getConcurrentWorkStackOverflowCount()
+		);
+	env->_cleanedCardTraceIndex = 0;
 	omrobjectptr_t objectPtr = NULL;
 	bool moreCards = true;
 	bool moreRefs = true;
@@ -1246,8 +1250,11 @@ MM_ConcurrentGCIncrementalUpdate::finalCleanCards(MM_EnvironmentBase *env)
 					}
 
 					if (!dirty) {
+						// another thread cleaning cards might race and clean card and then scan an object
+						// if this check occurrs between those 2 steps, this thread will conclude it's not in dirty card and also scan this object
 						totalTraced += _markingScheme->scanObject(env, objectPtr, SCAN_REASON_PACKET);
 					} else {
+						Trc_MM_ConcurrentGCIncrementalUpdate_finalCleanCards_processItem(env->getLanguageVMThread(), objectPtr, _stats.getConcurrentWorkStackOverflowCount());
 						_concurrentDelegate.processItem(env, objectPtr);
 					}
 				}
@@ -1266,6 +1273,7 @@ MM_ConcurrentGCIncrementalUpdate::finalCleanCards(MM_EnvironmentBase *env)
 	flushLocalBuffers(env);
 	_stats.incFinalTraceCount(totalTraced);
 	_stats.incFinalCardCleanCount(totalCleaned);
+	Trc_MM_ConcurrentCollectionCardCleaningEnd(env->getLanguageVMThread());
 }
 
 void

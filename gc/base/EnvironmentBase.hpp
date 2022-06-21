@@ -116,6 +116,10 @@ protected:
 #endif /* OMR_GC_SEGREGATED_HEAP */
 
 public:
+#define CLEANED_CARD_TRACE_MAX 16
+	Card *_cleanedCardTrace[CLEANED_CARD_TRACE_MAX];
+	uintptr_t _cleanedCardTraceIndex;
+
 	/**
 	 * Codes used to identify attached VM threads.
 	 *

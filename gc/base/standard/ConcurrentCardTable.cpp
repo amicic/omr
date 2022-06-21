@@ -722,24 +722,26 @@ MM_ConcurrentCardTable::reportCardCleanPass2Start(MM_EnvironmentBase *env)
 MMINLINE bool
 MM_ConcurrentCardTable::getExclusiveCardTableAccess(MM_EnvironmentBase *env, CardCleanPhase currentPhase, bool threadAtSafePoint)
 {
-
 	/* Try to take control of preparation for next stage of card cleaning */
 	if (!cardTableBeingPrepared(currentPhase)) {
-		if (currentPhase == (CardCleanPhase) MM_AtomicOperations::lockCompareExchangeU32((volatile uint32_t*)&_cardCleanPhase,
-																						(uint32_t) currentPhase,
-																						(uint32_t) currentPhase + 1)) {
-			assume0(cardTableBeingPrepared(_cardCleanPhase));
-			return true;
-		}
+			if (currentPhase == (CardCleanPhase) MM_AtomicOperations::lockCompareExchangeU32((volatile uint32_t*)&_cardCleanPhase,
+																																											(uint32_t) currentPhase,
+																																											(uint32_t) currentPhase + 1)) {
+					assume0(cardTableBeingPrepared(_cardCleanPhase));
+					Trc_MM_ConcurrentCardTable_getExclusiveCardTableAccess_won(env->getLanguageVMThread(), currentPhase, currentPhase + 1);
+					return true;
+			}
 	}
 
 	/* Another thread won race so block until card table prepared */
 	while(cardTableBeingPrepared(_cardCleanPhase)) {
-		omrthread_yield();
+			omrthread_yield();
 	}
 
+	Trc_MM_ConcurrentCardTable_getExclusiveCardTableAccess_lost(env->getLanguageVMThread(), currentPhase);
 	return false;
 }
+
 
 /*
  * Release exclusive control of the card table
@@ -747,16 +749,17 @@ MM_ConcurrentCardTable::getExclusiveCardTableAccess(MM_EnvironmentBase *env, Car
 MMINLINE  void
 MM_ConcurrentCardTable::releaseExclusiveCardTableAccess(MM_EnvironmentBase *env)
 {
+    /* Cache the current value */
+    CardCleanPhase currentPhase = _cardCleanPhase;
 
-	/* Cache the current value */
-	CardCleanPhase currentPhase = _cardCleanPhase;
+    /* Finished initializing. Only one thread can be here but for
+     * consistency use atomic operation to update card cleaning phase
+    */
 
-	/* Finished initializing. Only one thread can be here but for
-	 * consistency use atomic operation to update card cleaning phase
-	*/
+	Trc_MM_ConcurrentCardTable_releaseExclusiveCardTableAccess(env->getLanguageVMThread(), currentPhase, currentPhase + 1);
 
-	assume0(cardCleaningInProgress((CardCleanPhase((uint32_t)currentPhase + 1))));
-	MM_AtomicOperations::lockCompareExchangeU32((volatile uint32_t*)&_cardCleanPhase,
+    assume0(cardCleaningInProgress((CardCleanPhase((uint32_t)currentPhase + 1))));
+    MM_AtomicOperations::lockCompareExchangeU32((volatile uint32_t*)&_cardCleanPhase,
 																(uint32_t) currentPhase,
 																(uint32_t) currentPhase + 1);
 
@@ -779,6 +782,7 @@ MM_ConcurrentCardTable::releaseExclusiveCardTableAccess(MM_EnvironmentBase *env)
 bool
 MM_ConcurrentCardTable::cleanCards(MM_EnvironmentBase *env, bool isMutator, uintptr_t sizeToDo,	uintptr_t *sizeDone, bool threadAtSafePoint)
 {
+    Trc_MM_ConcurrentCardTable_cleanCards_phase(env->getLanguageVMThread(), _cardCleanPhase);
 	Card *nextDirtyCard;
 	uintptr_t cleanedSoFar;
 	uintptr_t cardsCleaned = 0;
@@ -905,6 +909,7 @@ MM_ConcurrentCardTable::cleanCards(MM_EnvironmentBase *env, bool isMutator, uint
 	if (NULL == nextDirtyCard) {
         currentCleaningPhase = _cardCleanPhase;
         if (cardCleaningInProgress(currentCleaningPhase)) {
+        	Trc_MM_ConcurrentCardTable_cleanCards_nextPhase(env->getLanguageVMThread(), currentCleaningPhase, currentCleaningPhase + 1);
 			MM_AtomicOperations::lockCompareExchangeU32((volatile uint32_t*)&_cardCleanPhase,
 																								(uint32_t) currentCleaningPhase,
 																								(uint32_t) currentCleaningPhase + 1);
@@ -984,6 +989,9 @@ MM_ConcurrentCardTable::cleanSingleCard(MM_EnvironmentBase *env, Card *card, uin
 			rememberedObjectsFound = true;
 		}
 		assume0(sizeToDo > sizeDone);
+        if (_cardCleanPhase > PHASE1_CLEANING) {
+        	Trc_MM_ConcurrentCardTable_cleanSingleCard(env->getLanguageVMThread(), _cardCleanPhase, card, objectPtr);
+        }
 		sizeDone += _markingScheme->scanObject(env, objectPtr, SCAN_REASON_DIRTY_CARD, (sizeToDo - sizeDone));
 	}
 
@@ -1079,9 +1087,18 @@ MM_ConcurrentCardTable::finalCleanCards(MM_EnvironmentBase *env, uintptr_t *byte
 		/* ..and address of last slot N.B Range is EXCLUSIVE */
 		uintptr_t *heapTop = (uintptr_t *)((uint8_t *)heapBase + CARD_SIZE);
 
+        env->_cleanedCardTrace[env->_cleanedCardTraceIndex++] = nextDirtyCard;
+        if (CLEANED_CARD_TRACE_MAX == env->_cleanedCardTraceIndex) {
+                env->_cleanedCardTraceIndex = 0;
+        }
+        if (phase2) {
+			Trc_MM_ConcurrentCardTable_finalCleanCards(env->getLanguageVMThread(), (uintptr_t)phase2, nextDirtyCard, NULL);
+        }
+
 		/* Then iterate over all marked objects in the heap between the two addresses */
 		MM_HeapMapIterator markedObjectIterator(_extensions, markMap, heapBase, heapTop);
 		while (NULL != (objectPtr = markedObjectIterator.nextObject())) {
+			Trc_MM_ConcurrentCardTable_finalCleanCards(env->getLanguageVMThread(), (uintptr_t)phase2, nextDirtyCard, objectPtr);
 			traceCount += _markingScheme->scanObject(env, objectPtr, SCAN_REASON_DIRTY_CARD);
 		}
 

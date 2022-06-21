@@ -2452,7 +2452,7 @@ MM_ConcurrentGC::scanRememberedSet(MM_EnvironmentBase *env)
 				 */
 				if ((objectPtr >= _heapBase)
 					&& (objectPtr <  _heapAlloc)
-					&& _markingScheme->isMarkedOutline(objectPtr)
+					&& _markingScheme->isMarkedOutline(objectPtr) // this condition might not be good for SATB if (as it stands now) not all tenure objects are marked concurrently
 					&& !canSkipObjectRSScan(env, objectPtr)) {
 						/* VMDESIGN 2048 -- due to barrier elision optimizations, the JIT may not have dirtied
 						 * cards for some objects in the remembered set. Therefore we may discover references

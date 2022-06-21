@@ -1002,3 +1002,33 @@ TraceEvent=Trc_MM_SparseAddressOrderedFixedSizeDataPool_returnFreeListEntry_succ
 
 TraceEntry=Trc_MM_getSparseAddressAndDecommitLeaves_Entry Overhead=1 Level=3 Group=arraylet Template="MM_IndexableObjectAllocationModel::getSparseAddressAndDecommitLeaves_Entry: inHeapObjectPointer (spine): %p, bytesToAllocate: %p, arrayletLeafCount: %zu, arrayletLeafSize: %p"
 TraceExit=Trc_MM_getSparseAddressAndDecommitLeaves_Exit Overhead=1 Level=3 Group=arraylet Template="MM_IndexableObjectAllocationModel::getSparseAddressAndDecommitLeaves_Exit: inHeapObjectPointer (spine): %p, bytesStillRemainingToAllocate (should be zero if allocated successfully to sparse heap): %zu"
+
+TraceEvent=Trc_MM_ConcurrentCardTable_getExclusiveCardTableAccess_won Overhead=1 Level=2 Group=cardclean Template="ConcurrentCardTable::getExclusiveCardTableAccess phase %zu->%zu won"
+TraceEvent=Trc_MM_ConcurrentCardTable_getExclusiveCardTableAccess_lost Overhead=1 Level=2 Group=cardclean Template="ConcurrentCardTable::getExclusiveCardTableAccess phase %zu lost"
+
+TraceEvent=Trc_MM_ConcurrentCardTable_releaseExclusiveCardTableAccess Overhead=1 Level=2 Group=cardclean Template="ConcurrentCardTable::releaseExclusiveCardTableAccess attempting phase %zu->%zu"
+
+TraceEvent=Trc_MM_ConcurrentCardTable_cleanCards_phase Overhead=1 Level=2 Group=cardclean Template="ConcurrentCardTable::cleanCards _cardCleanPhase %zu"
+TraceEvent=Trc_MM_ConcurrentCardTable_cleanCards_nextPhase Overhead=1 Level=2 Group=cardclean Template="ConcurrentCardTable::cleanCards attempting phase %zu->%zu"
+
+TraceEvent=Trc_MM_ConcurrentCardTable_cleanSingleCard Overhead=1 Level=2 Group=cardclean Template="ConcurrentCardTable::cleanSingleCard phase %zu card %p object %p"
+
+TraceEvent=Trc_MM_ConcurrentCardTable_finalCleanCards Overhead=1 Level=2 Group=cardclean Template="ConcurrentCardTable::finalCleanCards phase2 %zu card %p object %p"
+
+TraceEvent=Trc_MM_MarkingDelegate_getObjectScanner_tryMarkClassObject Overhead=1 Level=2 Group=objectscan Template="MarkingDelegate::getObjectScanner_tryMarkObject class %p classObject %p"
+TraceEvent=Trc_MM_MarkingDelegate_getObjectScanner_markedClassObject Overhead=1 Level=2 Group=objectscan Template="MarkingDelegate::getObjectScanner_markedObject class %p classObject %p"
+TraceEvent=Trc_MM_MarkingDelegate_getObjectScanner_scanClassObject Overhead=1 Level=2 Group=objectscan Template="MarkingDelegate::getObjectScanner_scanClassObject object %p"
+TraceEvent=Trc_MM_ConcurrentGCIncrementalUpdate_finalCleanCards_processItem Overhead=1 Level=2 Group=objectscan Template="ConcurrentGCIncrementalUpdat::finalCleanCards_processItem object %p overflowCount %zu"
+
+TraceEvent=Trc_MM_MarkingDelegate_completeMarking_scanClass1 Overhead=1 Level=2 Group=classscan Template="MarkingDelegate::completeMarking_scanClass1 class %p classObject %p"
+TraceEvent=Trc_MM_MarkingDelegate_completeMarking_scanClass2 Overhead=1 Level=2 Group=classscan Template="MarkingDelegate::completeMarking_scanClass2 class %p classObject %p"
+TraceEvent=Trc_MM_MarkingDelegate_completeMarking_markObject Overhead=1 Level=2 Group=classscan Template="MarkingDelegate::markObject class %p classObject %p"
+
+TraceEvent=Trc_MM_MarkingDelegate_scanClass_markObject Overhead=1 Level=2 Group=classscan Template="MarkingDelegate::scanClass_markObject class %p classObject %p"
+
+TraceEvent=Trc_MM_ConcurrentMarkingDelegate_collectClassRoots Overhead=1 Level=2 Group=classscan Template="ConcurrentMarkingDelegate::collectClassRoots class %p"
+TraceEvent=Trc_MM_ConcurrentMarkingDelegate_concurrentClassMark_scanClass Overhead=1 Level=2 Group=classscan Template="ConcurrentMarkingDelegate::concurrentClassMark_scanClass class %p classObject %p"
+TraceEvent=Trc_MM_ConcurrentMarkingDelegate_concurrentClassMark_markObject Overhead=1 Level=2 Group=classscan Template="ConcurrentMarkingDelegate::concurrentClassMark_markObject class %p classObject %p"
+
+
+
