@@ -1234,7 +1234,9 @@ MM_ConcurrentGCIncrementalUpdate::finalCleanCards(MM_EnvironmentBase *env)
 				/* If object in a dirty card we will re-visit later so ignore it for now */
 				} else {
 					bool dirty;
+					bool safeCardLoad = false;
 
+tryLoadDirty:
 #if defined(OMR_GC_MODRON_SCAVENGER)
 					/* If scavenger is enabled then ref may be in nursery */
 					if(_extensions->scavengerEnabled) {
@@ -1248,6 +1250,11 @@ MM_ConcurrentGCIncrementalUpdate::finalCleanCards(MM_EnvironmentBase *env)
 					if (!dirty) {
 						totalTraced += _markingScheme->scanObject(env, objectPtr, SCAN_REASON_PACKET);
 					} else {
+						if (!safeCardLoad) {
+							safeCardLoad = true;
+							MM_AtomicOperations::readWriteBarrier();
+							goto tryLoadDirty;
+						}
 						_concurrentDelegate.processItem(env, objectPtr);
 					}
 				}
