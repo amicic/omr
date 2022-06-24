@@ -46,7 +46,7 @@ MM_ConcurrentSafepointCallback::kill(MM_EnvironmentBase *env)
 }
 
 void
-#if defined(AIXPPC) || defined(LINUXPPC)
+#if defined(AIXPPC) || defined(LINUXPPC) || defined(OMR_ARCH_AARCH64)
 MM_ConcurrentSafepointCallback::registerCallback(MM_EnvironmentBase *env, SafepointCallbackHandler handler, void *userData, bool cancelAfterGC)
 #else
 MM_ConcurrentSafepointCallback::registerCallback(MM_EnvironmentBase *env, SafepointCallbackHandler handler, void *userData)

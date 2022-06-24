@@ -46,7 +46,7 @@ private:
 protected:
 
 public:
-#if defined(AIXPPC) || defined(LINUXPPC)
+#if defined(AIXPPC) || defined(LINUXPPC) || defined(OMR_ARCH_AARCH64)
 	virtual void registerCallback(MM_EnvironmentBase *env, SafepointCallbackHandler handler, void *userData, bool cancelAfterGC = false);
 #else
 	virtual void registerCallback(MM_EnvironmentBase *env,  SafepointCallbackHandler handler, void *userData);
