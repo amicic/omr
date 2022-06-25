@@ -1070,6 +1070,8 @@ MM_ConcurrentCardTable::finalCleanCards(MM_EnvironmentBase *env, uintptr_t *byte
 			phase2 = true;
 		}
 
+		MM_AtomicOperations::readBarrier();
+
 		/* Clean the card before we trace into it */
 		finalCleanCard(nextDirtyCard);
 		cards += 1;
@@ -1078,8 +1080,6 @@ MM_ConcurrentCardTable::finalCleanCards(MM_EnvironmentBase *env, uintptr_t *byte
 		uintptr_t *heapBase = (uintptr_t *)cardAddrToHeapAddr(env,nextDirtyCard);
 		/* ..and address of last slot N.B Range is EXCLUSIVE */
 		uintptr_t *heapTop = (uintptr_t *)((uint8_t *)heapBase + CARD_SIZE);
-
-		MM_AtomicOperations::readWriteBarrier();
 
 		/* Then iterate over all marked objects in the heap between the two addresses */
 		MM_HeapMapIterator markedObjectIterator(_extensions, markMap, heapBase, heapTop);
