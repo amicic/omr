@@ -429,7 +429,7 @@ MM_SweepPoolManagerAddressOrderedListBase::connectFinalChunk(
 			sweepState->_largestFreeEntry);
 
 	/* Validate sweeps free space accounting */
-	assume0(memoryPool->isMemoryPoolValid(envModron, false));
+	Assert_MM_true(memoryPool->isMemoryPoolValid(envModron, false));
 }
 
 /**

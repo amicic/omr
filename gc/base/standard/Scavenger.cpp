@@ -484,7 +484,7 @@ MM_Scavenger::workerSetupForGC(MM_EnvironmentStandard *env)
 uintptr_t
 MM_Scavenger::calculateMaxCacheCount(uintptr_t activeMemorySize)
 {
-	return 5 * (activeMemorySize / (_extensions->scavengerScanCacheMaximumSize + _extensions->scavengerScanCacheMinimumSize));
+	return 1 * (activeMemorySize / (_extensions->scavengerScanCacheMaximumSize + _extensions->scavengerScanCacheMinimumSize));
 }
 
 void

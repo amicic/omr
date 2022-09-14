@@ -518,6 +518,7 @@ retry:
 	}
 
 	/* Adjust the free memory size */
+	Assert_MM_true(_freeMemorySize >= sizeInBytesRequired);
 	_freeMemorySize -= sizeInBytesRequired;
 
 	/* Update allocation statistics */
@@ -538,6 +539,7 @@ retry:
 	} else {
 		updatePrevCardUnalignedFreeEntry(currentFreeEntry->getNext(compressed), previousFreeEntry);
 		/* Adjust the free memory size and count */
+		Assert_MM_true(_freeMemorySize >= recycleEntrySize);
 		_freeMemorySize -= recycleEntrySize;
 		_freeEntryCount -= 1;
 
@@ -689,6 +691,7 @@ retry:
 	}
 
 	/* Adjust the free memory size */
+	Assert_MM_true(_freeMemorySize >= consumedSize);
 	_freeMemorySize -= consumedSize;
 
 	_allocCount += 1;
@@ -711,6 +714,7 @@ retry:
 		} else {
 			updatePrevCardUnalignedFreeEntry(entryNext, FREE_ENTRY_END);
 			/* Adjust the free memory size and count */
+			Assert_MM_true(_freeMemorySize >= recycleEntrySize);
 			_freeMemorySize -= recycleEntrySize;
 			_freeEntryCount -= 1;
 
@@ -752,7 +756,7 @@ MM_MemoryPoolAddressOrderedList::getConsumedSizeForTLH(MM_EnvironmentBase *env, 
 		if (!alignTLHForParallelGC(env, freeEntry, &consumedSize)) {
 			/* If alignment was required and it failed (i.e resulted in consumedSize < minEntrySize), abandon entry and retry */
 			abandonHeapChunk((void *)freeEntry, (void *)(((uintptr_t)freeEntry) + freeEntrySize));
-
+			Assert_MM_true(_freeMemorySize >= freeEntrySize);
 			_freeMemorySize -= freeEntrySize;
 			_allocDiscardedBytes += freeEntrySize;
 
@@ -945,7 +949,7 @@ MM_MemoryPoolAddressOrderedList::expandWithRange(MM_EnvironmentBase *env, uintpt
 			_freeMemorySize += expandSize;
 			_largeObjectAllocateStats->incrementFreeEntrySizeClassStats(previousFreeEntry->getSize());
 
-			assume0(isMemoryPoolValid(env, true));
+			Assert_MM_true(isMemoryPoolValid(env, true));
 			return ;
 		}
 		/* Check if the range can be fused to the head of the next free entry */
@@ -970,7 +974,7 @@ MM_MemoryPoolAddressOrderedList::expandWithRange(MM_EnvironmentBase *env, uintpt
 			_freeMemorySize += expandSize;
 			_largeObjectAllocateStats->incrementFreeEntrySizeClassStats(newFreeEntry->getSize());
 
-			assume0(isMemoryPoolValid(env, true));
+			Assert_MM_true(isMemoryPoolValid(env, true));
 			return ;
 		}
 	}
@@ -1004,7 +1008,7 @@ MM_MemoryPoolAddressOrderedList::expandWithRange(MM_EnvironmentBase *env, uintpt
 		_largestFreeEntry = freeEntry->getSize(); 
 	}
 
-	assume0(isMemoryPoolValid(env, true));
+	Assert_MM_true(isMemoryPoolValid(env, true));
 }
 
 /**
@@ -1092,10 +1096,11 @@ MM_MemoryPoolAddressOrderedList::contractWithRange(MM_EnvironmentBase *env, uint
 	}
 
 	/* Adjust the free memory data */
+	Assert_MM_true(_freeMemorySize >= totalContractSize);
 	_freeMemorySize -= totalContractSize;
 	_freeEntryCount -= contractCount;
 
-	assume0(isMemoryPoolValid(env, true));
+	Assert_MM_true(isMemoryPoolValid(env, true));
 	
 	return lowAddress;
 }
@@ -1696,6 +1701,7 @@ MM_MemoryPoolAddressOrderedList::recycleHeapChunk(MM_EnvironmentBase *env, void 
 	}
 
 	_largeObjectAllocateStats->incrementFreeEntrySizeClassStats((uintptr_t)top - (uintptr_t)base);
+	Assert_MM_true(chunkTop > chunkBase);
 	_freeMemorySize += (uintptr_t)chunkTop - (uintptr_t)chunkBase;
 	_freeEntryCount += freeEntryCount;
 
@@ -1725,7 +1731,7 @@ MM_MemoryPoolAddressOrderedList::printCurrentFreeList(MM_EnvironmentBase *env, c
 	}
 }
 
-#if defined(DEBUG)
+//#if defined(DEBUG)
 /*
  * Verify that the free space statistics for this pool are correct.
  * @param largestFreValid Set if call is between collections as _largestFreEntry
@@ -1807,7 +1813,7 @@ MM_MemoryPoolAddressOrderedList::getCurrentFreeMemorySize(MM_EnvironmentBase *en
 	return currentFree;
 }
 
-#endif /* DEBUG */
+//#endif /* DEBUG */
 
 void 
 MM_MemoryPoolAddressOrderedList::recalculateMemoryPoolStatistics(MM_EnvironmentBase *env)

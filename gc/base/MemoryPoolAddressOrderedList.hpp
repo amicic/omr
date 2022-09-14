@@ -165,11 +165,11 @@ public:
 
 	virtual void moveHeap(MM_EnvironmentBase *env, void *srcBase, void *srcTop, void *dstBase);
 	
-#if defined(DEBUG)	
+//#if defined(DEBUG)
 	bool isMemoryPoolValid(MM_EnvironmentBase *env, bool postCollect);
 	uintptr_t getCurrentLargestFree(MM_EnvironmentBase *env);
 	uintptr_t getCurrentFreeMemorySize(MM_EnvironmentBase *env);
-#endif /* DEBUG */	
+//#endif /* DEBUG */
 
 	virtual void  printCurrentFreeList(MM_EnvironmentBase *env, const char *area);
 	

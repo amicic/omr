@@ -203,9 +203,9 @@ public:
 	MMINLINE void setFreeEntryCount(uintptr_t entryCount) { _freeEntryCount = entryCount; }
 	MMINLINE void setApproximateFreeMemorySize(uintptr_t approximateFreeMemorySize) { _approximateFreeMemorySize = approximateFreeMemorySize; }
 	
-#if defined(DEBUG)	
+//#if defined(DEBUG)
 	MMINLINE virtual bool isMemoryPoolValid(MM_EnvironmentBase *env, bool postCollect)	{ return true; }
-#endif	
+//#endif
 
 	void registerMemoryPool(MM_MemoryPool *memoryPool);
 	void unregisterMemoryPool(MM_MemoryPool *memoryPool);
