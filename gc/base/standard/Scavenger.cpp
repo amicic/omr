@@ -4960,6 +4960,29 @@ MM_Scavenger::reportGCIncrementStart(MM_EnvironmentStandard *env)
 		Assert_MM_unreachable();
 	}
 
+	if (_extensions->isConcurrentScavengerInProgress()) {
+		/* convert from nanoseconds to microseconds, compiler should autocast lvalue (int64_t) to rvalue (uint64_t) but just incase */
+		uint64_t startUserTime   =      (uint64_t)stats->_startProcessTimes._userTime   / 1000;
+		uint64_t startSystemTime =      (uint64_t)stats->_startProcessTimes._systemTime / 1000;
+
+		uint64_t endUserTime     =      (uint64_t)stats->_endProcessTimes._userTime             / 1000;
+		uint64_t endSystemTime   =      (uint64_t)stats->_endProcessTimes._systemTime   / 1000;
+
+		// these may fail !!!
+		uint64_t durationInMicroseconds  = omrtime_hires_delta(stats->_endTime, stats->_startTime, OMRPORT_TIME_DELTA_IN_MICROSECONDS);
+		uint64_t userTimeInMicroseconds  = omrtime_hires_delta(endUserTime, startUserTime, OMRPORT_TIME_DELTA_IN_MICROSECONDS);
+		uint64_t systemTimeInMicroseconds  = omrtime_hires_delta(endSystemTime, startSystemTime, OMRPORT_TIME_DELTA_IN_MICROSECONDS);
+		uint64_t stallTimeInMicroseconds  = omrtime_hires_delta(0, stats->_stallTime, OMRPORT_TIME_DELTA_IN_MICROSECONDS);
+
+		omrtty_printf("reportGCIncrementStart duration/user/system/stall %zu/%zu/%zu/%zu\n", durationInMicroseconds/1000, userTimeInMicroseconds/1000, systemTimeInMicroseconds/1000, stallTimeInMicroseconds/1000);
+
+		U_64 mainCpuMillis, workerCpuMillis;
+		U_32 maxThreads, currentThreads;
+		j9gc_get_CPU_times((J9JavaVM *)_omrVM->_language_vm, &mainCpuMillis, &workerCpuMillis, &maxThreads, &currentThreads);
+
+		omrtty_printf("reportGCIncrementStart main/worker/total %zu/%zu/%zu\n", mainCpuMillis, workerCpuMillis, mainCpuMillis + workerCpuMillis);
+	}
+
 	TRIGGER_J9HOOK_MM_PRIVATE_GC_INCREMENT_START(
 		_extensions->privateHookInterface,
 		env->getOmrVMThread(),
