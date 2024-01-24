@@ -1211,6 +1211,10 @@ retry:
 				MM_AllocateDescription allocDescription(0, 0, false, true);
 				/* Update the optimum scan cache size */
 				uintptr_t scanCacheSize = calculateOptimumCopyScanCacheSize(env);
+				OMRPORT_ACCESS_FROM_ENVIRONMENT(env);
+				if (0 == env->getWorkerID()) {
+					omrtty_printf("Scav::reserveForSS workerID %zu scanCacheSize %zu\n", env->getWorkerID(), scanCacheSize);
+				}
 				allocateResult = (NULL != _survivorMemorySubSpace->collectorAllocateTLH(env, this, &allocDescription, scanCacheSize, addrBase, addrTop));
 				env->_scavengerStats._semiSpaceAllocationCountSmall += 1;
 			}
@@ -1333,6 +1337,11 @@ retry:
 				MM_AllocateDescription allocDescription(0, 0, false, true);
 				allocDescription.setCollectorAllocateExpandOnFailure(true);
 				uintptr_t scanCacheSize = calculateOptimumCopyScanCacheSize(env);
+				OMRPORT_ACCESS_FROM_ENVIRONMENT(env);
+				if (0 == env->getWorkerID()) {
+					omrtty_printf("Scav::reserveForTenure workerID %zu scanCacheSize %zu\n", env->getWorkerID(), scanCacheSize);
+				}
+
 				allocateResult = (NULL != _tenureMemorySubSpace->collectorAllocateTLH(env, this, &allocDescription, scanCacheSize, addrBase, addrTop));
 
 #if defined(OMR_GC_LARGE_OBJECT_AREA)
