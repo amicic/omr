@@ -1096,6 +1096,8 @@ MM_ParallelGlobalGC::internalPreCollect(MM_EnvironmentBase *env, MM_MemorySubSpa
 		}
 	}
 
+	OMRPORT_ACCESS_FROM_ENVIRONMENT(env);
+	omrtty_printf("flushCachesForGC from MM_ParallelGlobalGC::internalPreCollect\n");
 	GC_OMRVMInterface::flushCachesForGC(env);
 	
 	_markingScheme->getMarkMap()->setMarkMapValid(false);

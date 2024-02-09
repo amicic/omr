@@ -4240,6 +4240,11 @@ MM_Scavenger::mainThreadGarbageCollect(MM_EnvironmentBase *envBase, MM_AllocateD
 	bool firstIncrement = true;
 #endif
 
+	omrtty_printf("flushCachesForGC from MM_Scavenger::mainThreadGarbageCollect\n");
+
+	/* Flush any VM level changes to prepare for a safe slot walk */
+	GC_OMRVMInterface::flushCachesForGC(env);
+
 	if (firstIncrement)	{
 		if (_extensions->processLargeAllocateStats) {
 			processLargeAllocateStatsBeforeGC(env);
@@ -4580,9 +4585,13 @@ MM_Scavenger::internalPreCollect(MM_EnvironmentBase *env, MM_MemorySubSpace *sub
 			}
 		}
 	}
-
-	/* Flush any VM level changes to prepare for a safe slot walk */
-	GC_OMRVMInterface::flushCachesForGC(env);
+//
+//	OMRPORT_ACCESS_FROM_ENVIRONMENT(env);
+//	omrtty_printf("flushCachesForGC from MM_Scavenger::internalPreCollect\n");
+//
+//
+//	/* Flush any VM level changes to prepare for a safe slot walk */
+//	GC_OMRVMInterface::flushCachesForGC(env);
 }
 
 /**

@@ -452,9 +452,11 @@ MM_EnvironmentBase::acquireExclusiveVMAccessForGC(MM_Collector *collector, bool 
 
 	collector->incrementExclusiveAccessCount();
 
-	if (flushCaches) {
-		GC_OMRVMInterface::flushCachesForGC(this);
-	}
+//	if (flushCaches) {
+//		OMRPORT_ACCESS_FROM_ENVIRONMENT(this);
+//		omrtty_printf("flushCachesForGC from acquireExclusiveVMAccessForGC\n");
+//		GC_OMRVMInterface::flushCachesForGC(this);
+//	}
 
 	return !_exclusiveAccessBeatenByOtherThread;
 

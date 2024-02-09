@@ -67,6 +67,7 @@
 #include "MemorySubSpaceFlat.hpp"
 #include "MemorySubSpaceSemiSpace.hpp"
 #include "ObjectModel.hpp"
+#include "OMRVMInterface.hpp"
 #include "ParallelDispatcher.hpp"
 #include "SpinLimiter.hpp"
 #include "SublistIterator.hpp"
@@ -2000,6 +2001,11 @@ MM_ConcurrentGC::internalPreCollect(MM_EnvironmentBase *env, MM_MemorySubSpace *
 		MM_ParallelGlobalGC::internalPreCollect(env, subSpace, allocDescription, gcCode);
 	} else if (CONCURRENT_TRACE_ONLY <= executionModeAtGC) {
 		/* We are going to complete the concurrent cycle to generate the GCStart/GCIncrement events */
+
+		OMRPORT_ACCESS_FROM_ENVIRONMENT(env);
+		omrtty_printf("flushCachesForGC from MM_ConcurrentGC::internalPreCollect\n");
+		GC_OMRVMInterface::flushCachesForGC(env);
+
 		reportGCStart(env);
 		reportGCIncrementStart(env);
 		reportGlobalGCIncrementStart(env);
