@@ -285,4 +285,17 @@ typedef uintptr_t (*condYieldFromGCFunctionPtr) (OMR_VMThread *omrVMThread, uint
 		<data type="uint64_t" name="timestamp" description="time of event" />
 	</event>
 
+	<event>
+		<name>J9HOOK_MM_OMR_FLUSH_CACHES_FOR_GC</name>
+		<description>
+			This is called slighly after exclusive VM access is acquired, and slightly before various GC start hooks.
+			This is before flush itself, which deletes all stats of various application thread caches.
+			So, it's very similar to GC start event, except that all the stats are still available, for reporting and processing.
+		</description>
+		<struct>MM_FlushCachesForGCEvent</struct>
+		<data type="struct OMR_VMThread*" name="currentThread" description="current thread" />
+		<data type="uint64_t" name="timestamp" description="time of event" />
+		<data type="uintptr_t" name="eventid" description="unique identifier for event" />
+	</event>
+
 </interface>
