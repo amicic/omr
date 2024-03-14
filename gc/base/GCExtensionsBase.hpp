@@ -122,6 +122,29 @@ enum BackOutState {
 	backOutStarted			/* Backout started */
 };
 
+struct cpuStats {
+	int64_t prev_userTime;
+	int64_t prev_systemTime;
+	int64_t prev_cpuIdleTime;
+	int64_t prev_cpuUserTime;
+	int64_t prev_cpuSystemTime;
+	int64_t prev_cpuNiceTime;
+	int64_t prev_cpuIrqTime;
+	int64_t prev_cpuSoftirqTime;
+	int64_t prev_cpuTime;
+	int64_t prev_elapsedTimeNew;
+	int64_t prev_elapsedTime;
+	double weighted_avg_interval;
+	// int64_t weighted_avg_sumTime;
+	// int64_t weighted_avg_cpuTime;
+	// int64_t weighted_avg_idleTime;
+	double weighted_avg_cpuUtil;
+	double weighted_avg_procUtil;
+	double weighted_avg_cpuIdle;
+	bool ifCpuDiff;
+
+};
+
 /* Note:  These should be templates if DDR ever supports them (JAZZ 40487) */
 class MM_UserSpecifiedParameterUDATA {
 	/* Data Members */
@@ -876,6 +899,7 @@ public:
 #endif /* defined(OMR_VALGRIND_MEMCHECK) */
 
 	bool shouldForceLowMemoryHeapCeilingShiftIfPossible; /**< Whether we should force compressed reference shift to 3 **/
+	cpuStats cpustats;
 	/* Function Members */
 private:
 
@@ -1967,6 +1991,7 @@ public:
 		, valgrindMempoolAddr(0)
 		, memcheckHashTable(NULL)
 		, shouldForceLowMemoryHeapCeilingShiftIfPossible(false)
+		, cpustats()
 #endif /* defined(OMR_VALGRIND_MEMCHECK) */
 	{
 		_typeId = __FUNCTION__;
