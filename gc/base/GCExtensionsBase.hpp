@@ -33,6 +33,7 @@
 #include "AllocationStats.hpp"
 #include "ArrayObjectModel.hpp"
 #include "BaseVirtual.hpp"
+#include "CPUStats.hpp"
 #include "ExcessiveGCStats.hpp"
 #include "Forge.hpp"
 #include "GlobalGCStats.hpp"
@@ -876,6 +877,7 @@ public:
 #endif /* defined(OMR_VALGRIND_MEMCHECK) */
 
 	bool shouldForceLowMemoryHeapCeilingShiftIfPossible; /**< Whether we should force compressed reference shift to 3 **/
+	MM_CPUStats cpuStats;
 	/* Function Members */
 private:
 
@@ -1967,6 +1969,7 @@ public:
 		, valgrindMempoolAddr(0)
 		, memcheckHashTable(NULL)
 		, shouldForceLowMemoryHeapCeilingShiftIfPossible(false)
+		, cpuStats()
 #endif /* defined(OMR_VALGRIND_MEMCHECK) */
 	{
 		_typeId = __FUNCTION__;

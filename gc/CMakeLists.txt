@@ -173,7 +173,7 @@ set(omrgc_sources
 	stats/AllocationStats.cpp
 	stats/CardCleaningStats.cpp
 	stats/ClassUnloadStats.cpp
-
+	stats/CPUStats.cpp
 	stats/FreeEntrySizeClassStats.cpp
 	stats/HeapResizeStats.cpp
 	stats/LargeObjectAllocateStats.cpp

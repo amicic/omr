@@ -46,6 +46,8 @@ public:
 
 	omrthread_process_time_t _startProcessTimes; /**< Process (Kernel and User) start time(s) */
 	omrthread_process_time_t _endProcessTimes;   /**< Process (Kernel and User) end time(s) */
+
+	MM_CPUStats _cpuStats; /**< CPU utilization measured between STW GC increments (mostly mutator activity and various VM (GC, JIT,...) background threads) */
 private:
 protected:
 public:
@@ -62,6 +64,7 @@ public:
 		,_stallTime(0)
 		,_startProcessTimes()
 		,_endProcessTimes()
+		,_cpuStats()
 	{};
 };
 
