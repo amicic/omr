@@ -135,6 +135,8 @@ MM_TLHAllocationSupport::refresh(MM_EnvironmentBase *env, MM_AllocateDescription
 		return false;
 	}
 
+
+
 	MM_AllocationStats *stats = _objectAllocationInterface->getAllocationStats();
 
 	void *lastTLHobj = restoreTLHTopForGC(env);
@@ -149,6 +151,12 @@ MM_TLHAllocationSupport::refresh(MM_EnvironmentBase *env, MM_AllocateDescription
 
 	/* Try to cache the current TLH */
 	if ((NULL != getRealTop()) && (getRemainingSize() >= tlhMinimumSize)) {
+
+//		OMRPORT_ACCESS_FROM_ENVIRONMENT(env);
+//		if (getRemainingSize() > 16 * 1024) {
+//			omrtty_printf("refreshing envid %zu while abandoning %zu sizeInBytesRequired %zu\n", env->getEnvironmentId(), getRemainingSize(), sizeInBytesRequired);
+//		}
+
 		/* Cache the current TLH because it is bigger than the minimum size */
 		MM_HeapLinkedFreeHeaderTLH* newCache = (MM_HeapLinkedFreeHeaderTLH*)getAlloc();
 
@@ -195,6 +203,11 @@ MM_TLHAllocationSupport::refresh(MM_EnvironmentBase *env, MM_AllocateDescription
 		stats->_tlhDiscardedBytes -= getSize();
 
 		didRefresh = true;
+
+//		OMRPORT_ACCESS_FROM_ENVIRONMENT(env);
+//		if (getSize() > 16 * 1024) {
+//			omrtty_printf("refreshing envid %zu from abandoned %zu sizeInBytesRequired %zu\n", env->getEnvironmentId(), getSize(), sizeInBytesRequired);
+//		}
 	} else {
 		/* Try allocating a fresh TLH */
 		MM_AllocationContext *ac = env->getAllocationContext();

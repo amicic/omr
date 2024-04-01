@@ -46,6 +46,7 @@
 #if defined(OMR_VALGRIND_MEMCHECK)
 #include "MemcheckWrapper.hpp"
 #endif /* defined(OMR_VALGRIND_MEMCHECK) */
+#include "ObjectAllocationInterface.hpp"
 
 #include "HeapRegionManager.hpp"
 #include "HeapRegionDescriptor.hpp"
@@ -450,7 +451,11 @@ MM_MemoryPoolAddressOrderedList::internalAllocate(MM_EnvironmentBase *env, uintp
 	uintptr_t largestFreeEntry = 0;
 	
 	if (lockingRequired) {
+		MM_AllocationStats *threadAllocStats = env->_objectAllocationInterface->getAllocationStats();
+		uintptr_t allocCountBefore = _allocCount;
 		_heapLock.acquire();
+		uintptr_t allocCountAfter = _allocCount;
+		threadAllocStats->_allocContentionCount += (allocCountAfter - allocCountBefore);
 	}
 
 #if defined(OMR_GC_CONCURRENT_SWEEP)
@@ -643,7 +648,11 @@ MM_MemoryPoolAddressOrderedList::internalAllocateTLH(MM_EnvironmentBase *env, ui
 	uintptr_t recycleEntrySize = 0;
 	
 	if (lockingRequired) {
+		uintptr_t allocCountBefore = _allocCount;
 		_heapLock.acquire();
+		uintptr_t allocCountAfter = _allocCount;
+		MM_AllocationStats *threadAllocStats = env->_objectAllocationInterface->getAllocationStats();
+		threadAllocStats->_allocContentionCount += (allocCountAfter - allocCountBefore);
 	}
 
 retry:

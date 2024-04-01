@@ -51,6 +51,7 @@ MM_AllocationStats::clear()
 	_discardedBytes = 0;
 	_allocationSearchCount = 0;
 	_allocationSearchCountMax = 0;
+	_allocContentionCount = 0;
 }
 
 void
@@ -91,4 +92,5 @@ MM_AllocationStats::merge(MM_AllocationStats *stats)
 		MM_AtomicOperations::lockCompareExchange(
 			&_allocationSearchCountMax, prevMax, stats->_allocationSearchCountMax);
 	}
+	MM_AtomicOperations::add(&_allocContentionCount, stats->_allocContentionCount);
 }

@@ -601,6 +601,7 @@ MM_ParallelGlobalGC::mainThreadGarbageCollect(MM_EnvironmentBase *env, MM_Alloca
 bool
 MM_ParallelGlobalGC::shouldCompactThisCycle(MM_EnvironmentBase *env, MM_AllocateDescription *allocDescription, uintptr_t activeSubspaceMaxExpansionInSpace, MM_GCCode gcCode) 
 {
+	OMRPORT_ACCESS_FROM_ENVIRONMENT(env);
 	MM_Heap *heap = _extensions->heap;
 	MM_AllocationStats *allocStats = &_extensions->allocationStats;
 	CompactReason compactReason = COMPACT_NONE;
@@ -718,13 +719,17 @@ MM_ParallelGlobalGC::shouldCompactThisCycle(MM_EnvironmentBase *env, MM_Allocate
 	tlhPercent = allocStats->_tlhRefreshCountFresh > 0 ? (uintptr_t) (((uint64_t) allocStats->_tlhAllocatedFresh * 100) / (uint64_t) totalBytesAllocated) : 0;
 	
 	/* Check at least 50% of free space at end of last GC has been consumed by tlh allocations */
-	if( tlhPercent > 50 ) {
+	if (tlhPercent > 50) {
 		/* Calculate average size of tlh allocated since tenure area last collected */
-		uintptr_t avgTlh= allocStats->_tlhAllocatedFresh / allocStats->_tlhRefreshCountFresh;
-		
+		uintptr_t avgTlh = allocStats->_tlhAllocatedFresh / allocStats->_tlhRefreshCountFresh;
+
+
 		/* Compaction trigger is a multiple of the minimum tlh size */
-		uintptr_t compaction_trigger_avgtlh= _extensions->tlhMinimumSize * MINIMUM_TLHSIZE_MULTIPLIER;
-		if(avgTlh < compaction_trigger_avgtlh) {
+		uintptr_t compaction_trigger_avgtlh = _extensions->tlhMinimumSize * MINIMUM_TLHSIZE_MULTIPLIER;
+
+		omrtty_printf("shouldCompactThisCycle tlhPercent %zu avgTlh %zu compaction_trigger_avgtlh %zu\n", tlhPercent, avgTlh, compaction_trigger_avgtlh);
+
+		if (avgTlh < compaction_trigger_avgtlh) {
 			compactReason = COMPACT_FRAGMENTED;
 			goto compactionReqd;
 		}

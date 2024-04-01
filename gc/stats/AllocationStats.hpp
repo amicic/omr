@@ -56,6 +56,8 @@ public:
 	uintptr_t _allocationSearchCount;
 	uintptr_t _allocationSearchCountMax;
 
+	uintptr_t _allocContentionCount;
+
 	void clear();
 	void clearOwnableSynchronizer() { _ownableSynchronizerObjectCount = 0; }
 	void clearContinuation() { _continuationObjectCount = 0; }
@@ -119,7 +121,8 @@ public:
 		_continuationObjectCount(0),
 		_discardedBytes(0),
 		_allocationSearchCount(0),
-		_allocationSearchCountMax(0)
+		_allocationSearchCountMax(0),
+		_allocContentionCount(0)
 	{}
 };
 
