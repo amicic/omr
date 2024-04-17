@@ -1953,7 +1953,7 @@ public:
 		, _holdRandomThreadBeforeHandlingWorkUnit(false)
 		, _holdRandomThreadBeforeHandlingWorkUnitPeriod(100)
 		, _forceRandomBackoutsAfterScan(false)
-		, _forceRandomBackoutsAfterScanPeriod(5)
+		, _forceRandomBackoutsAfterScanPeriod(30)
 		, referenceChainWalkerMarkMap(NULL)
 		, trackMutatorThreadCategory(false)
 		, darkMatterSampleRate(32)

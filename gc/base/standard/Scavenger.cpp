@@ -1539,7 +1539,8 @@ MM_Scavenger::copyObject(MM_EnvironmentStandard *env, MM_ForwardedHeader* forwar
 {
 #if defined(OMR_GC_CONCURRENT_SCAVENGER)
 	/* todo: find an elegant way to force abort triggered by non GC threads */
-//	if (0 == (uint64_t)forwardedHeader->getObject() % 27449) {
+//	if (0 == (uint64_t)forwardedHeader->getObject() % 350377) {
+//	if (0 == (uint64_t)forwardedHeader->getObject() % 104729) {
 //		setBackOutFlag(env, backOutFlagRaised);
 //		return NULL;
 //	}
@@ -1599,7 +1600,7 @@ MM_Scavenger::forwardingSucceeded(MM_EnvironmentStandard *env, MM_CopyScanCacheS
 }
 
 MMINLINE omrobjectptr_t
-MM_Scavenger::copy(MM_EnvironmentStandard *env, MM_ForwardedHeader* forwardedHeader)
+MM_Scavenger::copy(MM_EnvironmentStandard *env, MM_ForwardedHeader *forwardedHeader)
 {
 	omrobjectptr_t result = NULL;
 	if (IS_CONCURRENT_ENABLED) {
@@ -1611,7 +1612,7 @@ MM_Scavenger::copy(MM_EnvironmentStandard *env, MM_ForwardedHeader* forwardedHea
 }
 
 template <bool variant> omrobjectptr_t
-MM_Scavenger::copyForVariant(MM_EnvironmentStandard *env, MM_ForwardedHeader* forwardedHeader)
+MM_Scavenger::copyForVariant(MM_EnvironmentStandard *env, MM_ForwardedHeader *forwardedHeader)
 {
 	uintptr_t objectCopySizeInBytes, objectReserveSizeInBytes;
 	uintptr_t hotFieldsDescriptor = 0;
@@ -1624,6 +1625,13 @@ MM_Scavenger::copyForVariant(MM_EnvironmentStandard *env, MM_ForwardedHeader* fo
 	if (isBackOutFlagRaised()) {
 		/* Waste of time to copy, if we aborted */
 		return NULL;
+	} else {
+		if (0 == (uint64_t)forwardedHeader->getObject() % 104729 && (0 == rand() % 19)) {
+//			OMRPORT_ACCESS_FROM_OMRPORT(env->getPortLibrary());
+//			omrtty_printf("copy about to abort workerID %zu object %zu/%llx\n",	env->getWorkerID(), (uint64_t)forwardedHeader->getObject(), (uint64_t)forwardedHeader->getObject());
+			setBackOutFlag(env, backOutFlagRaised);
+			return NULL;
+		}
 	}
 	/* Try and find memory for the object based on its age */
 	uintptr_t objectAge = _extensions->objectModel.getPreservedAge(forwardedHeader);
@@ -1700,13 +1708,7 @@ MM_Scavenger::copyForVariant(MM_EnvironmentStandard *env, MM_ForwardedHeader* fo
 	/* Check if memory was reserved successfully */
 	if (NULL == copyCache) {
 		/* Failure - the scavenger must back out the work it has done. */
-		/* raise the alert and return (with NULL) */
 		setBackOutFlag(env, backOutFlagRaised);
-		omrthread_monitor_enter(_scanCacheMonitor);
-		if (0 != _waitingCount) {
-			omrthread_monitor_notify_all(_scanCacheMonitor);
-		}
-		omrthread_monitor_exit(_scanCacheMonitor);
 		return NULL;
 	}
 
@@ -2232,6 +2234,9 @@ MM_Scavenger::externalNotifyToYield(MM_EnvironmentBase *env)
 #if defined(OMR_GC_CONCURRENT_SCAVENGER)
 	if (isCurrentPhaseConcurrent()) {
 		omrthread_monitor_enter(_scanCacheMonitor);
+		OMRPORT_ACCESS_FROM_OMRPORT(env->getPortLibrary());
+		omrtty_printf("externalNotifyToYield workerID %zu _doneIndex %zu _backOutDoneIndex %zu _cachedEntryCount %zu _waitingCount %zu setting _shouldYield to true\n",
+		 				env->getWorkerID(), _doneIndex, _backOutDoneIndex, _cachedEntryCount, _waitingCount);
 		_shouldYield = true;
 		if (0 != _waitingCount) {
 			omrthread_monitor_notify_all(_scanCacheMonitor);
@@ -2344,15 +2349,21 @@ MM_Scavenger::getNextScanCache(MM_EnvironmentStandard *env)
 	env->_scavengerStats._acquireScanListCount += 1;
 #endif /* J9MODRON_TGC_PARALLEL_STATISTICS */
 
- 	while (!doneFlag && !shouldAbortScanLoop(env)) {
- 		while (_cachedEntryCount > 0) {
+ 	while (!doneFlag) {
+ 		omrtty_printf("getNextScanCache 10: workerID %zu _doneIndex %zu _backOutDoneIndex %zu _cachedEntryCount %zu _waitingCount %zu\n",
+ 				env->getWorkerID(), _doneIndex, _backOutDoneIndex, _cachedEntryCount, _waitingCount);
+ 		while ((_cachedEntryCount > 0) && !shouldAbortScanLoop(env)) {
  			cache = getNextScanCacheFromList(env);
 
 			if (NULL != cache) {
+
+		 		omrtty_printf("getNextScanCache 12: workerID %zu _doneIndex %zu _backOutDoneIndex %zu _cachedEntryCount %zu _waitingCount %zu\n",
+		 				env->getWorkerID(), _doneIndex, _backOutDoneIndex, _cachedEntryCount, _waitingCount);
+
  				/* Check if there are threads waiting that should be notified because of pending entries */
- 				if((_cachedEntryCount > 0) && _waitingCount) {
+ 				if ((_cachedEntryCount > 0) && _waitingCount) {
 					if (0 == omrthread_monitor_try_enter(_scanCacheMonitor)) {
-						if(0 != _waitingCount) {
+						if (0 != _waitingCount) {
 							omrthread_monitor_notify(_scanCacheMonitor);
 						}
 						omrthread_monitor_exit(_scanCacheMonitor);
@@ -2370,9 +2381,17 @@ MM_Scavenger::getNextScanCache(MM_EnvironmentStandard *env)
 		omrthread_monitor_enter(_scanCacheMonitor);
 		_waitingCount += 1;
 
-		if(doneIndex == _doneIndex) {
-			if((env->_currentTask->getThreadCount() == _waitingCount) && (0 == _cachedEntryCount)) {
+ 		omrtty_printf("getNextScanCache 20: workerID %zu _doneIndex %zu _backOutDoneIndex %zu _cachedEntryCount %zu _waitingCount %zu\n",
+ 				env->getWorkerID(), _doneIndex, _backOutDoneIndex, _cachedEntryCount, _waitingCount);
+
+		if (doneIndex == _doneIndex) {
+	 		omrtty_printf("getNextScanCache 25: workerID %zu _doneIndex %zu _backOutDoneIndex %zu _cachedEntryCount %zu _waitingCount %zu\n",
+	 				env->getWorkerID(), _doneIndex, _backOutDoneIndex, _cachedEntryCount, _waitingCount);
+			if ((env->_currentTask->getThreadCount() == _waitingCount) && ((0 == _cachedEntryCount) || shouldAbortScanLoop(env))) {
 				flushBuffersForGetNextScanCache(env, true);
+
+		 		omrtty_printf("getNextScanCache 30: workerID %zu _doneIndex %zu _backOutDoneIndex %zu _cachedEntryCount %zu _waitingCount %zu\n",
+		 				env->getWorkerID(), _doneIndex, _backOutDoneIndex, _cachedEntryCount, _waitingCount);
 
 				if (shouldDoFinalNotify(env)) {
 					_waitingCount = 0;
@@ -2382,7 +2401,13 @@ MM_Scavenger::getNextScanCache(MM_EnvironmentStandard *env)
 					env->_scavengerStats.addToNotifyStallTime(notifyStartTime, omrtime_hires_clock());
 				}
 			} else {
-				while((0 == _cachedEntryCount) && (doneIndex == _doneIndex) && !shouldAbortScanLoop(env)) {
+		 		omrtty_printf("getNextScanCache 35: workerID %zu _doneIndex %zu _backOutDoneIndex %zu _cachedEntryCount %zu _waitingCount %zu\n",
+		 				env->getWorkerID(), _doneIndex, _backOutDoneIndex, _cachedEntryCount, _waitingCount);
+//				while ((0 == _cachedEntryCount) && (doneIndex == _doneIndex) && !shouldAbortScanLoop(env)) {
+				while (((0 == _cachedEntryCount) || shouldAbortScanLoop(env)) && (doneIndex == _doneIndex)) {
+		 		omrtty_printf("getNextScanCache 40: workerID %zu _doneIndex %zu _backOutDoneIndex %zu _cachedEntryCount %zu _waitingCount %zu\n",
+			 				env->getWorkerID(), _doneIndex, _backOutDoneIndex, _cachedEntryCount, _waitingCount);
+
 					flushBuffersForGetNextScanCache(env);
 #if defined(J9MODRON_TGC_PARALLEL_STATISTICS)
 					uint64_t waitEndTime, waitStartTime;
@@ -2396,6 +2421,10 @@ MM_Scavenger::getNextScanCache(MM_EnvironmentStandard *env)
 					} else {
 						env->_scavengerStats.addToWorkStallTime(waitStartTime, waitEndTime);
 					}
+
+			 		omrtty_printf("getNextScanCache 45: workerID %zu _doneIndex %zu _backOutDoneIndex %zu _cachedEntryCount %zu _waitingCount %zu\n",
+			 				env->getWorkerID(), _doneIndex, _backOutDoneIndex, _cachedEntryCount, _waitingCount);
+
 #endif /* J9MODRON_TGC_PARALLEL_STATISTICS */
 				}
 			}
@@ -2403,12 +2432,20 @@ MM_Scavenger::getNextScanCache(MM_EnvironmentStandard *env)
 
 		/* Set the local done flag and if we are done and the waiting count is 0 (last thread) exit */
 		doneFlag = (doneIndex != _doneIndex);
-		if(!doneFlag) {
+		if (!doneFlag) {
+	 		omrtty_printf("getNextScanCache 50: workerID %zu _doneIndex %zu _backOutDoneIndex %zu _cachedEntryCount %zu _waitingCount %zu\n",
+	 				env->getWorkerID(), _doneIndex, _backOutDoneIndex, _cachedEntryCount, _waitingCount);
+
 			_waitingCount -= 1;
+		} else {
+	 		omrtty_printf("getNextScanCache 55: workerID %zu _doneIndex %zu _backOutDoneIndex %zu _cachedEntryCount %zu _waitingCount %zu\n",
+	 				env->getWorkerID(), _doneIndex, _backOutDoneIndex, _cachedEntryCount, _waitingCount);
+
 		}
 
 		omrthread_monitor_exit(_scanCacheMonitor);
-	}
+	} // while (!doneFlag && !shouldAbortScanLoop(env));
+
 
 	return cache;
 }
@@ -2540,15 +2577,15 @@ MM_Scavenger::completeScan(MM_EnvironmentStandard *env)
 	/* take a snapshot of ID of this scan cycle (which will change in getNextScanCache() once all threads agree to leave the scan loop) */
 	uintptr_t doneIndex = _doneIndex;
 
+
+	omrtty_printf("completeScan before: workerID %zu doneIndex %zu _doneIndex %zu _backOutDoneIndex %zu\n",
+			env->getWorkerID(), doneIndex, _doneIndex, _backOutDoneIndex);
+
 	if (_extensions->_forceRandomBackoutsAfterScan) {
 		if (0 == (rand() % _extensions->_forceRandomBackoutsAfterScanPeriod)) {
-			omrtty_printf("Forcing backout at workUnitIndex: %zu lastSyncPointReached: %s\n", env->getWorkUnitIndex(), env->_lastSyncPointReached);
+			omrtty_printf("Forcing backout workerID %zu at workUnitIndex: %zu lastSyncPointReached: %s doneIndex %zu\n",
+					env->getWorkerID(), env->getWorkUnitIndex(), env->_lastSyncPointReached, doneIndex);
 			setBackOutFlag(env, backOutFlagRaised);
-			omrthread_monitor_enter(_scanCacheMonitor);
-			if (0 != _waitingCount) {
-				omrthread_monitor_notify_all(_scanCacheMonitor);
-			}
-			omrthread_monitor_exit(_scanCacheMonitor);
 		}
 	}
 
@@ -2583,6 +2620,9 @@ MM_Scavenger::completeScan(MM_EnvironmentStandard *env)
 	bool copyScanUpdated = (env->_scavengerStats._slotsScanned == 0) && (env->_scavengerStats._slotsCopied == 0);
 
 	Assert_MM_true(backOutRaisedThisScanCycle || ((0 == env->_scavengerRememberedSet.count) && copyScanUpdated));
+
+	omrtty_printf("completeScan after: workerID %zu doneIndex %zu _doneIndex %zu _backOutDoneIndex %zu\n",
+			env->getWorkerID(), doneIndex, _doneIndex, _backOutDoneIndex);
 
 	return !backOutRaisedThisScanCycle;
 }
@@ -3739,6 +3779,8 @@ MM_Scavenger::restoreMainThreadTenureTLHRemainders(MM_EnvironmentStandard *env)
 MMINLINE bool
 MM_Scavenger::checkAndSetShouldYieldFlag(MM_EnvironmentStandard *env) {
 #if defined(OMR_GC_CONCURRENT_SCAVENGER)
+	OMRPORT_ACCESS_FROM_OMRPORT(env->getPortLibrary());
+
 	/* Don't rely on various conditions being same during one concurrent phase.
 	 * If one GC thread decided that we need to yield, we must yield, there is no way back. Hence, we store the result in _shouldYield,
 	 * and rely on it for the rest of concurrent phase.
@@ -3750,7 +3792,14 @@ MM_Scavenger::checkAndSetShouldYieldFlag(MM_EnvironmentStandard *env) {
 	if (isCurrentPhaseConcurrent() && env->isExclusiveAccessRequestWaiting() && !_shouldYield) {
 		/* If we are yielding we must be working concurrently, so GC better not have exclusive VM access. We can really only assert it for the current thread */
 		Assert_MM_true(0 == env->getOmrVMThread()->exclusiveCount);
+		omrtty_printf("gcheckAndSetShouldYieldFlag workerID %zu _doneIndex %zu _backOutDoneIndex %zu _cachedEntryCount %zu _waitingCount %zu setting _shouldYield to true\n",
+		 				env->getWorkerID(), _doneIndex, _backOutDoneIndex, _cachedEntryCount, _waitingCount);
 		_shouldYield = true;
+	}
+
+	if (_shouldYield) {
+		omrtty_printf("gcheckAndSetShouldYieldFlag workerID %zu _doneIndex %zu _backOutDoneIndex %zu _cachedEntryCount %zu _waitingCount %zu setting returning true\n",
+						env->getWorkerID(), _doneIndex, _backOutDoneIndex, _cachedEntryCount, _waitingCount);
 	}
 	return _shouldYield;
 #else
@@ -3776,6 +3825,11 @@ MM_Scavenger::setBackOutFlag(MM_EnvironmentBase *env, BackOutState backOutState)
 		_backOutDoneIndex = _doneIndex;
 		/* Ensure that other CPUs see correct _backOutDoneIndex, by the time they see _backOutFlag is set */
 		MM_AtomicOperations::writeBarrier();
+
+		OMRPORT_ACCESS_FROM_OMRVM(_omrVM);
+		omrtty_printf("setBackOutFlag envID %zu threadType %zu workerID %zu _backOutDoneIndex %zu backOutState %zu _doneIndex %zu\n",
+				env->getEnvironmentId(), env->getThreadType(), env->getWorkerID(), _backOutDoneIndex, backOutState, _doneIndex);
+
 		_extensions->setScavengerBackOutState(backOutState);
 		if (backOutStarted > backOutState) {
 			Trc_MM_ScavengerBackout(env->getLanguageVMThread(), backOutFlagCleared < backOutState ? "true" : "false");
