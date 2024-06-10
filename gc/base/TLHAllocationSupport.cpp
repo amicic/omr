@@ -214,9 +214,20 @@ MM_TLHAllocationSupport::refresh(MM_EnvironmentBase *env, MM_AllocateDescription
 #if defined(OMR_GC_BATCH_CLEAR_TLH)
 			if (_zeroTLH) {
 				if (0 != extensions->batchClearTLH) {
+					OMRPORT_ACCESS_FROM_OMRPORT(env->getPortLibrary());
 					void *base = getBase();
 					void *top = getTop();
-					OMRZeroMemory(base, (uintptr_t)top - (uintptr_t)base);
+					uintptr_t totalSizeToZero = (uintptr_t)top - (uintptr_t)base;
+					if (totalSizeToZero > 128 * 1024) {
+						if (0 == (rand() % 1000)) {
+							omrtty_printf("large TLH, default clearing\n");
+						}
+//						OMRZeroMemory((void *)((uintptr_t)base + 128 * 1024), totalSizeToZero - 128 * 1024);
+//						OMRZeroMemory(base, 128 * 1024);
+						OMRZeroMemory(base, totalSizeToZero);
+					} else {
+						OMRZeroMemory(base, totalSizeToZero);
+					}
 				}
 			}
 #endif /* defined(OMR_GC_BATCH_CLEAR_TLH) */
