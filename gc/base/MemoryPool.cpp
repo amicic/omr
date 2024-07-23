@@ -31,6 +31,8 @@
 bool
 MM_MemoryPool::initialize(MM_EnvironmentBase *env)
 {
+	OMRPORT_ACCESS_FROM_ENVIRONMENT(env);
+	omrtty_printf("MM_MemoryPool::initialize %s\n", _poolName);
 	return true;
 }
 
