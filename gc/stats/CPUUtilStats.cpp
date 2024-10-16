@@ -45,10 +45,17 @@ MM_CPUUtilStats::recordProcessAndCpuUtilization(MM_EnvironmentBase *env, MM_Coll
 
 	stats->_endTime = omrtime_hires_clock();
 
-	J9SysinfoCPUTime cpuTime;
-	intptr_t portLibraryStatus = omrsysinfo_get_CPU_utilization(&cpuTime);
+	_validData = false;
 
-	_validData = (0 == portLibraryStatus);
+	uintptr_t noSkipRatio = (uintptr_t)ceil(10000 / OMR_MAX(env->getExtensions()->excessiveGCStats.avgGCTime, 1));
+	omrtty_printf("recordProcessAndCpuUtilization noSkipRatio %zu\n", noSkipRatio);
+	J9SysinfoCPUTime cpuTime;
+
+	if (0 == (rand() % noSkipRatio)) {
+		intptr_t portLibraryStatus = omrsysinfo_get_CPU_utilization(&cpuTime);
+
+		_validData = (0 == portLibraryStatus);
+	}
 
 	intptr_t processRc = omrthread_get_process_times(&stats->_endProcessTimes);
 

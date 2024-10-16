@@ -161,11 +161,16 @@ MM_Collector::recordExcessiveStatsForGCEnd(MM_EnvironmentBase* env)
 	 */
 	stats->freeMemorySizeAfter = extensions->heap->getApproximateActiveFreeMemorySize();
 
+	/* Tally the time spent gc'ing (both local and global gcs) */
+	uint64_t delta = 0;
+
 	/* now calculate weighted average ratio */
 	/* (protect from malicious clock jitters) */
 	if (stats->endGCTimeStamp > stats->startGCTimeStamp) {
 		/* Tally the time spent gc'ing (both local and global gcs) */
-		stats->totalGCTime += (uint64_t)omrtime_hires_delta(stats->startGCTimeStamp, stats->endGCTimeStamp, OMRPORT_TIME_DELTA_IN_MICROSECONDS);
+		delta = (uint64_t)omrtime_hires_delta(stats->startGCTimeStamp, stats->endGCTimeStamp, OMRPORT_TIME_DELTA_IN_MICROSECONDS);
+		stats->totalGCTime += delta;
+		stats->avgGCTime =  MM_Math::weightedAverage(stats->avgGCTime, delta, extensions->excessiveGCnewRatioWeight);
 	}
 
 	if (stats->endGCTimeStamp > stats->lastEndGlobalGCTimeStamp) {
@@ -184,6 +189,9 @@ MM_Collector::recordExcessiveStatsForGCEnd(MM_EnvironmentBase* env)
 		stats->newGCToUserTimeRatio = (float)((int64_t)stats->totalGCTime * 100.0 / (int64_t)omrtime_hires_delta(stats->lastEndGlobalGCTimeStamp, stats->endGCTimeStamp, OMRPORT_TIME_DELTA_IN_MICROSECONDS));
 		stats->avgGCToUserTimeRatio = MM_Math::weightedAverage(stats->avgGCToUserTimeRatio, stats->newGCToUserTimeRatio, extensions->excessiveGCnewRatioWeight);
 	}
+
+	omrtty_printf("recordExcessiveStatsForGCEnd delta %zu avgGCTime %zu avgGCToUserTimeRatio %f\n", delta, stats->avgGCTime, stats->avgGCToUserTimeRatio);
+
 }
 
 
