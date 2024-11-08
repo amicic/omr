@@ -449,6 +449,137 @@ MM_MemoryManager::createVirtualMemoryForHeap(MM_EnvironmentBase *env, MM_MemoryH
 	valgrindCreateMempool(extensions, env, (uintptr_t)handle->getMemoryBase());
 #endif /* defined(OMR_VALGRIND_MEMCHECK) */
 
+	{
+	/*
+	 * An Experiment: attempt to zero memory by decommit/commit
+	 */
+		uintptr_t testSize = (uintptr_t)(1 * 1024 * 1024 * 1024UL);
+		uintptr_t testIterations = 5;
+
+		OMRPORT_ACCESS_FROM_OMRPORT(env->getPortLibrary());
+		uintptr_t *arraySizes = NULL;
+		uintptr_t *arrayFlags = NULL;
+		arraySizes = omrvmem_supported_page_sizes();
+		arrayFlags = omrvmem_supported_page_flags();
+
+		/* use small pages */
+		uintptr_t testPageSize = arraySizes[0];
+		uintptr_t testPageFlags = arrayFlags[0];
+
+		MM_VirtualMemory *testInstance = MM_VirtualMemory::newInstance(
+				env, 256, testSize, testPageSize, testPageFlags, 0, NULL,
+				NULL, mode, 0, memoryCategory);
+
+		if (NULL != testInstance) {
+			uintptr_t *testLowAddress = (uintptr_t *)testInstance->getHeapBase();
+			uintptr_t *testHighAddress = (uintptr_t *)testInstance->getHeapTop();
+	//		bool commitResult = true;
+	//		bool decommitResult = true;
+			bool testResult = true;
+
+			uint64_t startTimeDecommit = 0;
+			uint64_t endTimeDecommit = 0;
+			uintptr_t deltaMicrosDecommit = 0;
+			uintptr_t deltaMicrosDirtyBeforeDecommit = 0;
+
+			uint64_t startTimeManual = 0;
+			uint64_t endTimeManual = 0;
+			uintptr_t deltaMicrosManual = 0;
+			uintptr_t deltaMicrosDirtyBeforeManual = 0;
+
+
+			printf (" --Virtual memory is allocated in range %p, %p\n", testLowAddress, testHighAddress);
+
+			/* commitResult = */ testInstance->commitMemory(testLowAddress, testSize);
+
+			for (uintptr_t i = 0; i < testIterations; i++) {
+
+
+				/* verify memory is zeroed */
+				uint64_t startTimeVerify = omrtime_hires_clock();
+
+				for (uintptr_t *current = testLowAddress; current < testHighAddress; current++) {
+					if (0 != *current) {
+						testResult = false;
+						printf (" !!!!!! address %p = %p\n", current, (void *)*current);
+						break;
+					}
+				}
+
+				uint64_t endTimeVerify = omrtime_hires_clock();
+
+				uintptr_t deltaMicrosVerify = (uintptr_t)omrtime_hires_delta(startTimeVerify, endTimeVerify, OMRPORT_TIME_DELTA_IN_MICROSECONDS);
+
+				if (!testResult) {
+					break;
+				}
+
+				/* measure how long to dirty  */
+				startTimeManual = omrtime_hires_clock();
+
+				/* dirty memory */
+				//memset(testLowAddress, 0xff, testSize);
+				for (uintptr_t *current = testLowAddress; current < testHighAddress; current += 1024) {
+					*current = (uintptr_t)-1;
+				}
+
+				endTimeManual = omrtime_hires_clock();
+				deltaMicrosDirtyBeforeManual = (uintptr_t)omrtime_hires_delta(startTimeManual, endTimeManual, OMRPORT_TIME_DELTA_IN_MICROSECONDS);
+
+
+				/* measure how long it takes zero memory manually */
+				startTimeManual = omrtime_hires_clock();
+
+				memset(testLowAddress, 0, testSize);
+//				for (uintptr_t *current = testLowAddress; current < testHighAddress; current++) {
+//					*current = (uintptr_t)0;
+//				}
+
+				endTimeManual = omrtime_hires_clock();
+				deltaMicrosManual = (uintptr_t)omrtime_hires_delta(startTimeManual, endTimeManual, OMRPORT_TIME_DELTA_IN_MICROSECONDS);
+
+				/* measure how long to dirty  */
+				startTimeDecommit = omrtime_hires_clock();
+
+				/* dirty memory */
+//				memset(testLowAddress, 0xff, testSize);
+				for (uintptr_t *current = testLowAddress; current < testHighAddress; current += 1024) {
+					*current = (uintptr_t)-1;
+				}
+
+				endTimeDecommit = omrtime_hires_clock();
+				deltaMicrosDirtyBeforeDecommit = (uintptr_t)omrtime_hires_delta(startTimeDecommit, endTimeDecommit, OMRPORT_TIME_DELTA_IN_MICROSECONDS);
+
+
+				/* measure how long it takes to zero memory using decommit */
+				startTimeDecommit = omrtime_hires_clock();
+
+				/* zero memory using decommit/commit */
+				/* decommitResult = */ testInstance->decommitMemory(testLowAddress, testSize, NULL, NULL);
+				/* commitResult = */ testInstance->commitMemory(testLowAddress, testSize);
+
+				endTimeDecommit = omrtime_hires_clock();
+				deltaMicrosDecommit = (uintptr_t)omrtime_hires_delta(startTimeDecommit, endTimeDecommit, OMRPORT_TIME_DELTA_IN_MICROSECONDS);
+
+				printf(" -- Time for reference: verify %zuus manual dirty/zero %zuus/%zuus, decommit dirty/zero %zuus/%zuus\n", deltaMicrosVerify, deltaMicrosDirtyBeforeManual, deltaMicrosManual, deltaMicrosDirtyBeforeDecommit, deltaMicrosDecommit);
+			}
+
+			if (testResult) {
+				printf (" --- Memory is zeroed properly ---\n");
+			}
+
+		} else {
+			printf (" !!!!!!!! Virtual memory size %p can not be created!\n", (void *)testSize);
+		}
+
+		if (NULL != testInstance) {
+			testInstance->kill(env);
+		}
+
+	/* ----- end of experiment ----- */
+	}
+
+
 	return NULL != instance;
 }
 
