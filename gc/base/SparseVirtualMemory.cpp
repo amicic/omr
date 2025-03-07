@@ -139,7 +139,7 @@ MM_SparseVirtualMemory::allocateSparseFreeEntryAndMapToHeapObject(void *proxyObj
 		 */
 		_sparseDataPool->mapSparseDataPtrToHeapProxyObjectPtr(sparseHeapAddr, proxyObjPtr, size);
 
-		/* Zeroing is safe to do after monitor release, since object has not been exposed yet. */
+		/* Zeroing (if needed at all) is safe to do after monitor release, since object has not been exposed yet. */
 		omrthread_monitor_exit(_largeObjectVirtualMemoryMutex);
 
 		bool success = MM_VirtualMemory::commitMemory(sparseHeapAddr, adjustedSize);
