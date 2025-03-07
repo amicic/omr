@@ -65,12 +65,14 @@ MM_SparseVirtualMemory::initialize(MM_EnvironmentBase *env, uint32_t memoryCateg
 	uintptr_t in_heap_size = (uintptr_t)_heap->getHeapTop() - (uintptr_t)_heap->getHeapBase();
 	uintptr_t maxHeapSize = _heap->getMaximumMemorySize();
 	uintptr_t regionSize = _heap->getHeapRegionManager()->getRegionSize();
+	// getTableRegionCount() ?
 	uintptr_t regionCount = in_heap_size / regionSize;
 
 	/* Ideally this should be ceilLog2, however this is the best alternative as ceilLog2 currently does not exist */
-	uintptr_t ceilLog2 = MM_Math::floorLog2(regionCount) + 1;
+	//uintptr_t ceilLog2 = MM_Math::floorLog2(regionCount) + 1;
 
-	uintptr_t off_heap_size = (uintptr_t)((ceilLog2 * in_heap_size) / 2);
+	//uintptr_t off_heap_size = (uintptr_t)((ceilLog2 * in_heap_size) / 2);
+	uintptr_t off_heap_size = in_heap_size / 4;
 	bool success = MM_VirtualMemory::initialize(env, off_heap_size, NULL, NULL, 0, memoryCategory);
 
 	if (success) {
@@ -128,32 +130,37 @@ MM_SparseVirtualMemory::allocateSparseFreeEntryAndMapToHeapObject(void *proxyObj
 	uintptr_t adjustedSize = adjustSize(size);
 
 	omrthread_monitor_enter(_largeObjectVirtualMemoryMutex);
-	void *sparseHeapAddr = _sparseDataPool->findFreeListEntry(adjustedSize);
-	bool success = MM_VirtualMemory::commitMemory(sparseHeapAddr, adjustedSize);
 
-#if defined(OSX) || defined(OMRZTPF)
-	/* Most platforms will perform an implicit zero through the preceding commit. */
-	OMRZeroMemory(sparseHeapAddr, adjustedSize);
-#endif /* defined(OSX) || defined(OMRZTPF)) */
+	void *sparseHeapAddr = _sparseDataPool->findFreeListEntry(adjustedSize);
 
 	if (NULL != sparseHeapAddr) {
 		/* While the allocate and commit will work with _pageSize aligned memory, the map will contain exact size of the object.
 		 * The size will be verified on updates.
 		 */
 		_sparseDataPool->mapSparseDataPtrToHeapProxyObjectPtr(sparseHeapAddr, proxyObjPtr, size);
+
+		/* Zeroing is safe to do after monitor release, since object has not been exposed yet. */
+		omrthread_monitor_exit(_largeObjectVirtualMemoryMutex);
+
+		bool success = MM_VirtualMemory::commitMemory(sparseHeapAddr, adjustedSize);
+
+		if (success) {
+#if defined(OSX) || defined(OMRZTPF)
+			/* Most platforms will perform an implicit zero through the preceding commit. */
+			OMRZeroMemory(sparseHeapAddr, adjustedSize);
+#endif /* defined(OSX) || defined(OMRZTPF)) */
+			Trc_MM_SparseVirtualMemory_commitMemory_success(sparseHeapAddr, (void *)adjustedSize, proxyObjPtr);
+		} else {
+			Trc_MM_SparseVirtualMemory_commitMemory_failure(sparseHeapAddr, (void *)adjustedSize, proxyObjPtr);
+		}
+
 	} else {
-		/* Impossible to get here, there should always be free space at sparse heap */
-		Assert_MM_unreachable();
+		omrthread_monitor_exit(_largeObjectVirtualMemoryMutex);
+
+		/* Not really a commit failure, but since sparseHeapAddr is NULL, still sufficiently distinguishable trace point */
+		Trc_MM_SparseVirtualMemory_commitMemory_failure(NULL, (void *)adjustedSize, proxyObjPtr);
 	}
 
-	omrthread_monitor_exit(_largeObjectVirtualMemoryMutex);
-
-	if (success) {
-		Trc_MM_SparseVirtualMemory_commitMemory_success(sparseHeapAddr, (void *)adjustedSize, proxyObjPtr);
-	} else {
-		Trc_MM_SparseVirtualMemory_commitMemory_failure(sparseHeapAddr, (void *)adjustedSize, proxyObjPtr);
-		sparseHeapAddr = NULL;
-	}
 
 	return sparseHeapAddr;
 }
