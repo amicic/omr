@@ -140,6 +140,9 @@ public:
 
 		tenureMemorySubspace->getMemoryPool()->resetDarkMatterBytes();
 		allocateStats->resetRemainingFreeMemoryAfterEstimate();
+		OMRPORT_ACCESS_FROM_ENVIRONMENT(env);
+		omrtty_printf("resetFragmentionStats avg %f\n", allocateStats->_averageRemainingFreeMemoryAfterEstimateAtGlobals);
+		// reset avg ?
 		_microFragmentedSize = 0;
 		_macroFragmentedSize = 0;
 	}

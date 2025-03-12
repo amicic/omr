@@ -384,16 +384,16 @@ MM_LargeObjectAllocateStats::estimateFragmentation(MM_EnvironmentBase *env)
 
 	_TLHSizeClassIndex = 0;
 	_TLHFrequentAllocationSize = 0;
-	/* simulate the allocation in approximately maxObjectStrides strides.
-	 * could be less, if fragmented. could be more if not fragmented (due to probablistic size decay of very large free entries).
-	 * stop up until we cannot satisfy allocate or remaining free memory is less than 1% of initial free memory.
-	 * if we do not make progress (strides are too small), we stop.
+	/* Simulate the allocation in approximately maxObjectStrides strides.
+	 * Could be less, if fragmented. could be more if not fragmented (due to probablistic size decay of very large free entries).
+	 * Stop up until we cannot satisfy allocate or remaining free memory is less than 1% of initial free memory.
+	 * If we do not make progress (strides are too small), we stop.
 	 */
-	for (; (0 == unsatisfiedAlloc) && (currentFreeMemory > initialFreeMemory / 100) && (prevFreeMemory > currentFreeMemory) ; stride++) {
+	for (; (0 == unsatisfiedAlloc) && (currentFreeMemory > initialFreeMemory / 100) && (prevFreeMemory > currentFreeMemory); stride++) {
 		/* save currentFreeMemory for checking if make progress in one stride */
 		prevFreeMemory = currentFreeMemory;
 		/* walk over frequent allocates, which will drive the simulation. tlh allocate will interleave with them */
-		for(uintptr_t i = 0; (i < maxFrequentAllocateSizes) && (0 == unsatisfiedAlloc); i++ ) {
+		for (uintptr_t i = 0; (i < maxFrequentAllocateSizes) && (0 == unsatisfiedAlloc); i++ ) {
 			float objectPercent = convertPercentUDATAToFloat(spaceSavingGetKthMostFreqCount(_spaceSavingSizesAveragePercent, i + 1));
 
 			if (objectPercent >= ignoreObjectPercentThreshold) {
@@ -698,6 +698,7 @@ MM_LargeObjectAllocateStats::isFirstIterationCompleteForCurrentStride(uintptr_t 
 uintptr_t
 MM_LargeObjectAllocateStats::simulateAllocateTLHs(MM_EnvironmentBase *env, uintptr_t allocBytes, uintptr_t *currentFreeMemory, uintptr_t strides)
 {
+	OMRPORT_ACCESS_FROM_ENVIRONMENT(env);
 	MM_GCExtensionsBase *ext = env->getExtensions();
 	Assert_MM_true(NULL != ext->freeEntrySizeClassStatsSimulated._frequentAllocationHead);
 
@@ -706,11 +707,15 @@ MM_LargeObjectAllocateStats::simulateAllocateTLHs(MM_EnvironmentBase *env, uintp
 	MM_FreeEntrySizeClassStats::FrequentAllocation *next = NULL;
 	/* using to detect unsatisfied case */
 	bool firstIterationForCurrentStride = true; 
-	uintptr_t allocBytesPerStride = allocBytes/strides;
+	uintptr_t allocBytesPerStride = allocBytes / strides;
 	uintptr_t allocBytesForCurrentStride = allocBytesPerStride;
 	uintptr_t maxSizeClasses = ext->freeEntrySizeClassStatsSimulated._maxSizeClasses;
+	uintptr_t stridesSinceLastSizeFractionalClassAdjustement = 0;
+	uintptr_t sizeClassIndexForStridesSinceLastSizeFractionalClassAdjustement = sizeClassIndex;
 	
 	Trc_MM_LargeObjectAllocateStats_simulateAllocateTLHs_entry(env->getLanguageVMThread(), allocBytes, allocBytes >> 20, *currentFreeMemory, *currentFreeMemory >> 20);
+	omrtty_printf("simulateAllocateTLHs allocBytesPerStride %zu strides %zu\n", allocBytesPerStride, strides);
+
 	/* keep allocating from this size class or any larger */
 	while ((allocBytesForCurrentStride > 0) && (firstIterationForCurrentStride || !isFirstIterationCompleteForCurrentStride(sizeClassIndex, maxSizeClasses))) {
 		if (firstIterationForCurrentStride && isFirstIterationCompleteForCurrentStride(sizeClassIndex, maxSizeClasses)) {
@@ -719,7 +724,7 @@ MM_LargeObjectAllocateStats::simulateAllocateTLHs(MM_EnvironmentBase *env, uintp
 		/* any available free entries of this size class? */
 		/* TODO: find a faster way to find next non zero size class index */
 		if (0 == _TLHFrequentAllocationSize) {
-			/* exhaused the current size class. move to next one */
+			/* Exhausted the current size class. move to next one */
 			if (0 != ext->freeEntrySizeClassStatsSimulated._count[sizeClassIndex]) {
 				Trc_MM_LargeObjectAllocateStats_simulateAllocateCommon_freeEntry_entry(env->getLanguageVMThread(), "TLH", "regular", sizeClassIndex, _sizeClassSizes[sizeClassIndex] , ext->freeEntrySizeClassStatsSimulated._count[sizeClassIndex]);
 
@@ -747,6 +752,9 @@ MM_LargeObjectAllocateStats::simulateAllocateTLHs(MM_EnvironmentBase *env, uintp
 					Trc_MM_LargeObjectAllocateStats_simulateAllocateCommon_satisfy(env->getLanguageVMThread(), "full", "regular", _sizeClassSizes[sizeClassIndex], sizeClassIndex);
 					Trc_MM_LargeObjectAllocateStats_simulateAllocateCommon_full(env->getLanguageVMThread(), ext->freeEntrySizeClassStatsSimulated._count[sizeClassIndex] - (uintptr_t)freeEntriesUsed, ext->freeEntrySizeClassStatsSimulated._count[sizeClassIndex], freeEntriesUsed);
 					ext->freeEntrySizeClassStatsSimulated._count[sizeClassIndex] -= (uintptr_t)freeEntriesUsed;
+
+
+					// ?????
 					*currentFreeMemory -= (uintptr_t)freeEntriesUsed * _sizeClassSizes[sizeClassIndex];
 					allocBytesForCurrentStride = 0;
 				}
@@ -768,21 +776,38 @@ MM_LargeObjectAllocateStats::simulateAllocateTLHs(MM_EnvironmentBase *env, uintp
 
 				uintptr_t freeEntrySize = minFreeEntrySize + (uintptr_t) ((maxFreeEntrySize - minFreeEntrySize) * ((float)rand() / (float)RAND_MAX));
 
+				omrtty_printf("simulateAllocateTLHs guessed freeEntrySize %zu (between %zu and %zu) strides %zu stridesSinceLastSizeFractionalClassAdjustement %zu\n", freeEntrySize, minFreeEntrySize, maxFreeEntrySize, strides, stridesSinceLastSizeFractionalClassAdjustement);
 				uintptr_t freeEntriesUsedInteger = (uintptr_t)freeEntriesUsed;
 				float freeEntriesUsedFractional = freeEntriesUsed - freeEntriesUsedInteger;
+				/* Fractions accumulate over time, so we carry them over from previous strides ever since they were ignored */
+//				uintptr_t freeEntrySizeAdjustement = (uintptr_t)(stridesSinceLastSizeFractionalClassAdjustement * freeEntriesUsedFractional * _sizeClassSizes[sizeClassIndex]);
+				uintptr_t freeEntrySizeAdjustement = (uintptr_t)(freeEntriesUsedFractional * _sizeClassSizes[sizeClassIndex]);
 
-				uintptr_t remainderSize = freeEntrySize - (uintptr_t)(freeEntriesUsedFractional * _sizeClassSizes[sizeClassIndex]);
+				uintptr_t remainderSize = MM_Math::saturatingSubtract(freeEntrySize, freeEntrySizeAdjustement);
 
 				/* often it will stay in the same size class, but if not, we have to update counters */
 				if (remainderSize < _sizeClassSizes[sizeClassIndex]) {
+					omrtty_printf("remainderSize %zu < %zu\n", remainderSize, _sizeClassSizes[sizeClassIndex]);
+
 					Assert_MM_true(((intptr_t)ext->freeEntrySizeClassStatsSimulated._count[sizeClassIndex]) > 0);
 					Trc_MM_LargeObjectAllocateStats_simulateAllocateCommon_adjustement(env->getLanguageVMThread(), ext->freeEntrySizeClassStatsSimulated._count[sizeClassIndex] - 1, ext->freeEntrySizeClassStatsSimulated._count[sizeClassIndex]);
 					ext->freeEntrySizeClassStatsSimulated._count[sizeClassIndex] -= 1;
 					*currentFreeMemory -= _sizeClassSizes[sizeClassIndex];
+					stridesSinceLastSizeFractionalClassAdjustement = 0;
 					if (remainderSize >= _largeObjectThreshold) {
 						uintptr_t updatedFreeEntrySize = incrementFreeEntrySizeClassStats(remainderSize, &ext->freeEntrySizeClassStatsSimulated);
 						Trc_MM_LargeObjectAllocateStats_simulateAllocateCommon_remainder(env->getLanguageVMThread(), 1, remainderSize, updatedFreeEntrySize);
 						*currentFreeMemory += updatedFreeEntrySize;
+					}
+				} else {
+					if (sizeClassIndexForStridesSinceLastSizeFractionalClassAdjustement == sizeClassIndex) {
+						omrtty_printf("inc stridesSinceLastSizeFractionalClassAdjustement\n");
+
+						/* One more stride where fraction did not affect the counts */
+						stridesSinceLastSizeFractionalClassAdjustement += 1;
+					} else {
+						stridesSinceLastSizeFractionalClassAdjustement = 0;
+						sizeClassIndexForStridesSinceLastSizeFractionalClassAdjustement = sizeClassIndex;
 					}
 				}
 
@@ -793,6 +818,7 @@ MM_LargeObjectAllocateStats::simulateAllocateTLHs(MM_EnvironmentBase *env, uintp
 						strides -= 1;
 						allocBytesForCurrentStride = allocBytesPerStride;
 						firstIterationForCurrentStride = true;
+						omrtty_printf("still same sizeClassIndex (1) %zu\n", sizeClassIndex);
 						_TLHSizeClassIndex = getNextSizeClass(sizeClassIndex, maxSizeClasses);
 					}
 				}
@@ -886,6 +912,7 @@ MM_LargeObjectAllocateStats::simulateAllocateTLHs(MM_EnvironmentBase *env, uintp
 						strides -= 1;
 						allocBytesForCurrentStride = allocBytesPerStride;
 						firstIterationForCurrentStride = true;
+						omrtty_printf("still same sizeClassIndex (2) %zu\n", sizeClassIndex);
 						_TLHSizeClassIndex = getNextSizeClass(sizeClassIndex, maxSizeClasses);
 						if (curr->_nextInSizeClass == next) {
 							prev = curr;

@@ -29,6 +29,7 @@
 
 #include "Base.hpp"
 #include "LightweightNonReentrantLock.hpp"
+#include "Math.hpp"
 
 #include "FreeEntrySizeClassStats.hpp"
 
@@ -68,7 +69,10 @@ private:
 	uint64_t _timeEstimateFragmentation;					 /**< The amount of time spent for estimating Fragmentation */
 	uint64_t _cpuTimeEstimateFragmentation;					 /**< The amount of cputime spent for estimating Fragmentation */
 	uint64_t _timeMergeAverage;								 /**< The amount of time spent for merging and averaging LargeAllocateStats */
+public:
 	uintptr_t _remainingFreeMemoryAfterEstimate;			 /**< result of estimateFragmentation */
+	//uintptr_t _remainingFreeMemoryAfterEstimateAtLastGlobal;
+	float _averageRemainingFreeMemoryAfterEstimateAtGlobals;
 	uintptr_t _freeMemoryBeforeEstimate;					 /**< initial free memory before estimateFragmentation */
 	uintptr_t _maxHeapSize;
 
@@ -216,7 +220,10 @@ public:
 	void setTimeMergeAverage(uint64_t time) { _timeMergeAverage = time; }
 	void addTimeMergeAverage(uint64_t time) { _timeMergeAverage += time; }
 	uintptr_t getRemainingFreeMemoryAfterEstimate() { return _remainingFreeMemoryAfterEstimate; }
-	void resetRemainingFreeMemoryAfterEstimate() { _remainingFreeMemoryAfterEstimate= 0; }
+	void resetRemainingFreeMemoryAfterEstimate() { _remainingFreeMemoryAfterEstimate = 0; }
+	void averageRemainingFreeMemoryAfterEstimateAtGlobals() {
+		_averageRemainingFreeMemoryAfterEstimateAtGlobals = MM_Math::weightedAverage(_averageRemainingFreeMemoryAfterEstimateAtGlobals, (float)_remainingFreeMemoryAfterEstimate, 0.5f);
+	}
 	uintptr_t getFreeMemoryBeforeEstimate() { return _freeMemoryBeforeEstimate; }
 	uintptr_t getMaxHeapSize() {return _maxHeapSize; }
 	uintptr_t getFreeMemory(){return _freeEntrySizeClassStats.getFreeMemory(_sizeClassSizes);}
@@ -244,6 +251,7 @@ public:
 		_cpuTimeEstimateFragmentation(0),
 		_timeMergeAverage(0),
 		_remainingFreeMemoryAfterEstimate(0),
+		_averageRemainingFreeMemoryAfterEstimateAtGlobals(0.0),
 		_freeMemoryBeforeEstimate(0),
 		_maxHeapSize(0),
 		_TLHSizeClassIndex(0),

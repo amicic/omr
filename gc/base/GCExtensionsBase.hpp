@@ -390,6 +390,7 @@ public:
 
 	float darkMatterCompactThreshold; /**< Value used to trigger compaction when dark matter ratio reaches this percentage of memory pools memory*/
 	float pageFragmentationCompactThreshold; /**< Enables compaction when page-fragmented memory and dark matter exceed this limit. The larger this number, the more memory can be fragmented before compact is triggered **/
+	float macroFragmentationCompactThreshold;
 
 	uintptr_t parSweepChunkSize;
 	uintptr_t heapExpansionMinimumSize;
@@ -1308,11 +1309,6 @@ public:
 		return objectModel.getObjectAlignmentInBytes();
 	}
 
-	MMINLINE float
-	getDarkMatterCompactThreshold() {
-		return darkMatterCompactThreshold;
-	}
-
 	/**
 	 * Set Tenure address range
 	 * @param base low address of Old subspace range
@@ -1600,6 +1596,7 @@ public:
 		, absoluteMinimumNewSubSpaceSize(MINIMUM_NEW_SPACE_SIZE)
 		, darkMatterCompactThreshold((float)0.15)
 		, pageFragmentationCompactThreshold((float)0.10)
+		, macroFragmentationCompactThreshold((float)0.15)
 		, parSweepChunkSize(0)
 		, heapExpansionMinimumSize(1024 * 1024)
 		, heapExpansionMaximumSize(0)

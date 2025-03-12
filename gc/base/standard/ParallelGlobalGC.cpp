@@ -758,38 +758,57 @@ MM_ParallelGlobalGC::shouldCompactThisCycle(MM_EnvironmentBase *env, MM_Allocate
 	}	
 
 	{
-		/* Tenure space dark matter trigger */
+		/* Various Tenure fragmentation compact triggers. */
 		MM_MemorySubSpace *memorySubSpace = heap->getDefaultMemorySpace()->getTenureMemorySubSpace();
 		uintptr_t totalSize = memorySubSpace->getActiveMemorySize();
 		MM_MemoryPool *memoryPool= memorySubSpace->getMemoryPool();
+		uintptr_t freeMemorySize = memoryPool->getActualFreeMemorySize();
+		MM_LargeObjectAllocateStats *stats = memoryPool->getLargeObjectAllocateStats();
+
 		uintptr_t darkMatterBytes = 0;
 		if (!_extensions->concurrentSweep) {
 			darkMatterBytes = memoryPool->getDarkMatterBytes();
 		}
-		uintptr_t freeMemorySize = memoryPool->getActualFreeMemorySize();
-		/* Consider the trigger only if heap fully expanded */
-		if (heap->getMemorySize() == heap->getMaximumMemorySize()) {
-			float darkMatterRatio = ((float)darkMatterBytes)/((float)freeMemorySize + (float)totalSize / 2);
 
-			if (darkMatterRatio > _extensions->getDarkMatterCompactThreshold()) {
+		/* Some triggers, when in an active phase of a run, are consider only if heap fully expanded. */
+		if (heap->getMemorySize() == heap->getMaximumMemorySize()) {
+			/* Dark matter */
+			float darkMatterRatio = ((float)darkMatterBytes) / ((float)freeMemorySize + (float)totalSize / 2);
+
+			if (darkMatterRatio > _extensions->darkMatterCompactThreshold) {
 				compactReason = COMPACT_MICRO_FRAG;
 				goto compactionReqd;
 			}
+
+			/* Macro fragmentation */
+			if (NULL != stats) {
+				uintptr_t macroFragmentation = stats->getRemainingFreeMemoryAfterEstimate();
+
+				float macroFragmentationRatio = ((float)macroFragmentation) / ((float)freeMemorySize + (float)totalSize / 2);
+
+				OMRPORT_ACCESS_FROM_OMRPORT(env->getPortLibrary());
+				omrtty_printf("macroFragmentation %zu avg %f freeMemorySize %zu totalSize %zu ratio %f\n", macroFragmentation, stats->_averageRemainingFreeMemoryAfterEstimateAtGlobals, freeMemorySize, totalSize, macroFragmentationRatio);
+
+				if (macroFragmentationRatio > _extensions->macroFragmentationCompactThreshold) {
+					compactReason = COMPACT_MACRO_FRAG;
+					goto compactionReqd;
+				}
+			}
 		}
 
+		/* Page level fragmentation */
 		if ((J9MMCONSTANT_EXPLICIT_GC_PREPARE_FOR_CHECKPOINT == gcCode.getCode())
 #if defined(OMR_GC_IDLE_HEAP_MANAGER)
 		|| ((J9MMCONSTANT_EXPLICIT_GC_IDLE_GC == gcCode.getCode()) && (_extensions->gcOnIdle))
 #endif /* OMR_GC_IDLE_HEAP_MANAGER */
 		) {
-			MM_LargeObjectAllocateStats *stats = memoryPool->getLargeObjectAllocateStats();
-
 			uintptr_t pageSize = heap->getPageSize();
+			// TODO: stats always non-null?
 			uintptr_t reusableFreeMemory = stats->getPageAlignedFreeMemory(pageSize);
 
 			uintptr_t memoryFragmentationDiff = freeMemorySize - reusableFreeMemory;
 			uintptr_t totalFragmentation = memoryFragmentationDiff + darkMatterBytes;
-			float totalFragmentationRatio = ((float)totalFragmentation)/((float)freeMemorySize + (float)totalSize / 2);
+			float totalFragmentationRatio = ((float)totalFragmentation) / ((float)freeMemorySize + (float)totalSize / 2);
 
 			Trc_ParallelGlobalGC_shouldCompactThisCycle(env->getLanguageVMThread(), totalFragmentationRatio, _extensions->pageFragmentationCompactThreshold);
 
@@ -1210,7 +1229,19 @@ MM_ParallelGlobalGC::processLargeAllocateStatsBeforeGC(MM_EnvironmentBase *env)
 void
 MM_ParallelGlobalGC::processLargeAllocateStatsAfterCompact(MM_EnvironmentBase *env)
 {
-	processLargeAllocateStatsAfterSweep(env);
+	MM_MemorySpace *defaultMemorySpace = _extensions->heap->getDefaultMemorySpace();
+	MM_MemorySubSpace *tenureMemorySubspace = defaultMemorySpace->getTenureMemorySubSpace();
+	MM_MemoryPool *memoryPool = tenureMemorySubspace->getMemoryPool();
+	MM_LargeObjectAllocateStats *stats = memoryPool->getLargeObjectAllocateStats();
+
+	memoryPool->mergeFreeEntryAllocateStats();
+	stats->verifyFreeEntryCount(memoryPool->getActualFreeEntryCount());
+
+	stats->_averageRemainingFreeMemoryAfterEstimateAtGlobals = 0.0;
+	stats->resetRemainingFreeMemoryAfterEstimate();
+	OMRPORT_ACCESS_FROM_ENVIRONMENT(env);
+	omrtty_printf("resetFragmentionStats avg %f current %zu\n", stats->_averageRemainingFreeMemoryAfterEstimateAtGlobals, stats->_remainingFreeMemoryAfterEstimate);
+
 }
 
 
@@ -1233,7 +1264,12 @@ MM_ParallelGlobalGC::processLargeAllocateStatsAfterSweep(MM_EnvironmentBase *env
 	if ((GLOBALGC_ESTIMATE_FRAGMENTATION == (_extensions->estimateFragmentation & GLOBALGC_ESTIMATE_FRAGMENTATION))
 		&& _extensions->configuration->canCollectFragmentationStats(env)
 	) {
+		OMRPORT_ACCESS_FROM_ENVIRONMENT(env);
+		omrtty_printf("resetFragmentionStats before avg %f\n", stats->_averageRemainingFreeMemoryAfterEstimateAtGlobals);
 		stats->estimateFragmentation(env);
+		//stats->_remainingFreeMemoryAfterEstimateAtLastGlobal = stats->_remainingFreeMemoryAfterEstimate;
+		stats->averageRemainingFreeMemoryAfterEstimateAtGlobals();
+		omrtty_printf("resetFragmentionStats after avg after %f current %zu\n", stats->_averageRemainingFreeMemoryAfterEstimateAtGlobals, stats->_remainingFreeMemoryAfterEstimate);
 	} else {
 		stats->resetRemainingFreeMemoryAfterEstimate();
 	}
