@@ -758,38 +758,57 @@ MM_ParallelGlobalGC::shouldCompactThisCycle(MM_EnvironmentBase *env, MM_Allocate
 	}	
 
 	{
-		/* Tenure space dark matter trigger */
+		/* Various Tenure fragmentation compact triggers. */
 		MM_MemorySubSpace *memorySubSpace = heap->getDefaultMemorySpace()->getTenureMemorySubSpace();
 		uintptr_t totalSize = memorySubSpace->getActiveMemorySize();
 		MM_MemoryPool *memoryPool= memorySubSpace->getMemoryPool();
+		uintptr_t freeMemorySize = memoryPool->getActualFreeMemorySize();
+		MM_LargeObjectAllocateStats *stats = memoryPool->getLargeObjectAllocateStats();
+
 		uintptr_t darkMatterBytes = 0;
 		if (!_extensions->concurrentSweep) {
 			darkMatterBytes = memoryPool->getDarkMatterBytes();
 		}
-		uintptr_t freeMemorySize = memoryPool->getActualFreeMemorySize();
-		/* Consider the trigger only if heap fully expanded */
-		if (heap->getMemorySize() == heap->getMaximumMemorySize()) {
-			float darkMatterRatio = ((float)darkMatterBytes)/((float)freeMemorySize + (float)totalSize / 2);
 
-			if (darkMatterRatio > _extensions->getDarkMatterCompactThreshold()) {
+		/* Some triggers, when in an active phase of a run, are consider only if heap fully expanded. */
+		if (heap->getMemorySize() == heap->getMaximumMemorySize()) {
+			/* Dark matter */
+			float darkMatterRatio = ((float)darkMatterBytes) / ((float)freeMemorySize + (float)totalSize / 2);
+
+			if (darkMatterRatio > _extensions->darkMatterCompactThreshold) {
 				compactReason = COMPACT_MICRO_FRAG;
 				goto compactionReqd;
 			}
+
+			/* Macro fragmentation */
+			if (NULL != stats) {
+				uintptr_t macroFragmentation = stats->getRemainingFreeMemoryAfterEstimate();
+
+				float macroFragmentationRatio = ((float)macroFragmentation) / ((float)freeMemorySize + (float)totalSize / 2);
+
+				OMRPORT_ACCESS_FROM_OMRPORT(env->getPortLibrary());
+				omrtty_printf("macroFragmentation %zu freeMemorySize %zu totalSize %zu ratio %f\n", macroFragmentation, freeMemorySize, totalSize, macroFragmentationRatio);
+
+				if (macroFragmentationRatio > _extensions->macroFragmentationThreshold) {
+					compactReason = COMPACT_MACRO_FRAG;
+					goto compactionReqd;
+				}
+			}
 		}
 
+		/* Page level fragmentation */
 		if ((J9MMCONSTANT_EXPLICIT_GC_PREPARE_FOR_CHECKPOINT == gcCode.getCode())
 #if defined(OMR_GC_IDLE_HEAP_MANAGER)
 		|| ((J9MMCONSTANT_EXPLICIT_GC_IDLE_GC == gcCode.getCode()) && (_extensions->gcOnIdle))
 #endif /* OMR_GC_IDLE_HEAP_MANAGER */
 		) {
-			MM_LargeObjectAllocateStats *stats = memoryPool->getLargeObjectAllocateStats();
-
 			uintptr_t pageSize = heap->getPageSize();
+			// TODO: stats always non-null?
 			uintptr_t reusableFreeMemory = stats->getPageAlignedFreeMemory(pageSize);
 
 			uintptr_t memoryFragmentationDiff = freeMemorySize - reusableFreeMemory;
 			uintptr_t totalFragmentation = memoryFragmentationDiff + darkMatterBytes;
-			float totalFragmentationRatio = ((float)totalFragmentation)/((float)freeMemorySize + (float)totalSize / 2);
+			float totalFragmentationRatio = ((float)totalFragmentation) / ((float)freeMemorySize + (float)totalSize / 2);
 
 			Trc_ParallelGlobalGC_shouldCompactThisCycle(env->getLanguageVMThread(), totalFragmentationRatio, _extensions->pageFragmentationCompactThreshold);
 
