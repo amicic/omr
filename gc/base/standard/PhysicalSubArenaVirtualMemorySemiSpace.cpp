@@ -585,6 +585,9 @@ MM_PhysicalSubArenaVirtualMemorySemiSpace::contract(MM_EnvironmentBase *env, uin
 			psavmssMoveData.srcTop = (void *)(((uintptr_t)allocateLeadingFreeTop) + heapSizeToMove);
 			psavmssMoveData.dstBase = (void *)allocateSegmentBase;
 
+			if(debug) {
+				omrtty_printf("\tWalking heap 1\n");
+			}
 			/* TODO: can this walk be parallelized? Probably not trivially, since the mark map isn't up to date at this point */
 			MM_ParallelGlobalGC *globalCollector = (MM_ParallelGlobalGC *)extensions->getGlobalCollector();
 			MM_HeapWalker *heapWalker = globalCollector->getHeapWalker();
@@ -767,6 +770,9 @@ MM_PhysicalSubArenaVirtualMemorySemiSpace::contract(MM_EnvironmentBase *env, uin
 			psavmssMoveData.srcTop = (void *)(((uintptr_t)allocateLeadingFreeTop)+ heapSizeToMove);
 			psavmssMoveData.dstBase = (void *)allocateSegmentBase;
 
+			if(debug) {
+				omrtty_printf("\tWalking heap 2\n");
+			}
 			/* TODO: can this walk be parallelized? Probably not trivially, since the mark map isn't up to date at this point */
 			MM_ParallelGlobalGC *globalCollector = (MM_ParallelGlobalGC *)extensions->getGlobalCollector();
 			MM_HeapWalker *heapWalker = globalCollector->getHeapWalker();
