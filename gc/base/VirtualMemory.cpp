@@ -127,6 +127,8 @@ MM_VirtualMemory::initialize(MM_EnvironmentBase* env, uintptr_t size, void* pref
 		}
 	}
 
+	omrtty_printf("MM_VirtualMemory::initialize _heapBase %p preferredAddress %p size %p\n", _heapBase, preferredAddress, size);
+
 	return NULL != _heapBase;
 }
 

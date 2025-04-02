@@ -68,9 +68,14 @@ MM_SparseVirtualMemory::initialize(MM_EnvironmentBase *env, uint32_t memoryCateg
 	uintptr_t regionCount = in_heap_size / regionSize;
 
 	/* Ideally this should be ceilLog2, however this is the best alternative as ceilLog2 currently does not exist */
-	uintptr_t ceilLog2 = MM_Math::floorLog2(regionCount) + 1;
+	//uintptr_t ceilLog2 = MM_Math::floorLog2(regionCount) + 1;
 
-	uintptr_t off_heap_size = (uintptr_t)((ceilLog2 * in_heap_size) / 2);
+	//uintptr_t off_heap_size = (uintptr_t)((ceilLog2 * in_heap_size) / 2);
+	uintptr_t off_heap_size = in_heap_size;
+	OMRPORT_ACCESS_FROM_ENVIRONMENT(env);
+	omrtty_printf("offheap size %zu\n", off_heap_size);
+
+
 	bool success = MM_VirtualMemory::initialize(env, off_heap_size, NULL, NULL, 0, memoryCategory);
 
 	if (success) {
