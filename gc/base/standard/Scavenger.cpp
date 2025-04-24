@@ -966,6 +966,9 @@ MM_Scavenger::canCalcGCStats(MM_EnvironmentStandard *env)
 	/* If no backout and we actually did a scavenge this time around then it's safe to gather stats */
 	canCalculate &= (!isBackOutFlagRaised() && (0 < _extensions->heap->getPercolateStats()->getScavengesSincePercolate()));
 
+	OMRPORT_ACCESS_FROM_OMRPORT(env->getPortLibrary());
+	omrtty_printf("canCalcGCStats cycleInProgress %zu backoutRaised %zu scavengesSincePercolate %zu\n", (uintptr_t)isConcurrentCycleInProgress(), (uintptr_t)isBackOutFlagRaised(), _extensions->heap->getPercolateStats()->getScavengesSincePercolate());
+
 	return canCalculate;
 }
 
@@ -4262,6 +4265,7 @@ MM_Scavenger::mainThreadGarbageCollect(MM_EnvironmentBase *envBase, MM_AllocateD
 			walkEnv->_objectAllocationInterface->restartCache(env);
 		}
 	}
+	omrtty_printf("mainThreadGarbageCollect clearIncrementGCStats firstIncrement %zu\n", (uintptr_t)firstIncrement);
 	clearIncrementGCStats(env, firstIncrement);
 	reportGCStart(env);
 	reportGCIncrementStart(env);
@@ -4286,6 +4290,8 @@ MM_Scavenger::mainThreadGarbageCollect(MM_EnvironmentBase *envBase, MM_AllocateD
 	_cycleTimes.incrementEnd = omrtime_hires_clock();
 
 	/* merge stats from this increment/phase to aggregate cycle stats */
+	omrtty_printf("mainThreadGarbageCollect mergeIncrementGCStats lastIncrement %zu\n", (uintptr_t)lastIncrement);
+
 	mergeIncrementGCStats(env, lastIncrement);
 	reportScavengeEnd(env, lastIncrement);
 
@@ -4300,7 +4306,7 @@ MM_Scavenger::mainThreadGarbageCollect(MM_EnvironmentBase *envBase, MM_AllocateD
 
 		_cycleTimes.cycleEnd = omrtime_hires_clock();
 
-		if(scavengeCompletedSuccessfully(env)) {
+		if (scavengeCompletedSuccessfully(env)) {
 
 			calculateRecommendedWorkingThreads(env);
 
@@ -4308,7 +4314,7 @@ MM_Scavenger::mainThreadGarbageCollect(MM_EnvironmentBase *envBase, MM_AllocateD
 			_extensions->rememberedSet.compact(env);
 
 			/* If -Xgc:fvtest=forcePoisonEvacuate has been specified, poison(fill poison pattern) evacuate space */
-			if(_extensions->fvtest_forcePoisonEvacuate) {
+			if (_extensions->fvtest_forcePoisonEvacuate) {
 				_activeSubSpace->poisonEvacuateSpace();
 			}
 
@@ -4318,16 +4324,16 @@ MM_Scavenger::mainThreadGarbageCollect(MM_EnvironmentBase *envBase, MM_AllocateD
 			/* Defer to collector language interface */
 			_delegate.mainThreadGarbageCollect_scavengeSuccess(env);
 
-			if(_extensions->scvTenureStrategyAdaptive) {
+			if (_extensions->scvTenureStrategyAdaptive) {
 				/* Adjust the tenure age based on the percentage of new space used.  Also, avoid / by 0 */
 				uintptr_t newSpaceTotalSize = _activeSubSpace->getMemorySubSpaceAllocate()->getActiveMemorySize();
 				uintptr_t newSpaceConsumedSize = _extensions->scavengerStats._flipBytes;
 				uintptr_t newSpaceSizeScale = newSpaceTotalSize / 100;
 
-				if((newSpaceConsumedSize < (_extensions->scvTenureRatioLow * newSpaceSizeScale)) && (_extensions->scvTenureAdaptiveTenureAge < OBJECT_HEADER_AGE_MAX)) {
+				if ((newSpaceConsumedSize < (_extensions->scvTenureRatioLow * newSpaceSizeScale)) && (_extensions->scvTenureAdaptiveTenureAge < OBJECT_HEADER_AGE_MAX)) {
 					_extensions->scvTenureAdaptiveTenureAge++;
 				} else {
-					if((newSpaceConsumedSize > (_extensions->scvTenureRatioHigh * newSpaceSizeScale)) && (_extensions->scvTenureAdaptiveTenureAge > OBJECT_HEADER_AGE_MIN)) {
+					if ((newSpaceConsumedSize > (_extensions->scvTenureRatioHigh * newSpaceSizeScale)) && (_extensions->scvTenureAdaptiveTenureAge > OBJECT_HEADER_AGE_MIN)) {
 						_extensions->scvTenureAdaptiveTenureAge--;
 					}
 				}
@@ -4558,6 +4564,9 @@ MM_Scavenger::getCollectorExpandSize(MM_EnvironmentBase *env)
 void
 MM_Scavenger::internalPreCollect(MM_EnvironmentBase *env, MM_MemorySubSpace *subSpace, MM_AllocateDescription *allocDescription, uint32_t gcCode)
 {
+	OMRPORT_ACCESS_FROM_ENVIRONMENT(env);
+	omrtty_printf("MM_Scavenger::internalPreCollect subSpace %s\n", subSpace->getName());
+
 #if defined(OMR_ENV_DATA64) && defined(OMR_GC_FULL_POINTERS)
 	if (!env->compressObjectReferences()) {
 		if (1 == _extensions->fvtest_enableReadBarrierVerification) {
@@ -4599,6 +4608,8 @@ void
 MM_Scavenger::internalPostCollect(MM_EnvironmentBase *envBase, MM_MemorySubSpace *subSpace)
 {
 	MM_EnvironmentStandard *env = MM_EnvironmentStandard::getEnvironment(envBase);
+	OMRPORT_ACCESS_FROM_ENVIRONMENT(env);
+	omrtty_printf("MM_Scavenger::internalPostCollect subSpace %s\n", subSpace->getName());
 
 	calcGCStats(env);
 
@@ -5547,6 +5558,7 @@ bool
 MM_Scavenger::scavengeIncremental(MM_EnvironmentBase *env)
 {
 	Assert_MM_mustHaveExclusiveVMAccess(env->getOmrVMThread());
+	OMRPORT_ACCESS_FROM_OMRPORT(env->getPortLibrary());
 	bool result = false;
 	bool timeout = false;
 
@@ -5578,10 +5590,13 @@ MM_Scavenger::scavengeIncremental(MM_EnvironmentBase *env)
 			_extensions->rememberedSet.startProcessingSublist();
 
 			_concurrentPhase = concurrent_phase_scan;
+			omrtty_printf("scavengeIncremental roots -> scan\n");
+
 
 			if (isBackOutFlagRaised()) {
 				/* if we aborted during root processing, continue with the cycle while still in STW mode */
 				mergeIncrementGCStats(env, false);
+				omrtty_printf("scavengeIncremental roots backout merge/clearIncrementGCStats\n");
 				clearIncrementGCStats(env, false);
 				continue;
 			}
@@ -5599,8 +5614,9 @@ MM_Scavenger::scavengeIncremental(MM_EnvironmentBase *env)
 
 			_concurrentPhase = concurrent_phase_complete;
 
-			mergeIncrementGCStats(env, false);
-			clearIncrementGCStats(env, false);
+			//mergeIncrementGCStats(env, false);
+			omrtty_printf("scavengeIncremental scan -> complete\n");
+			//clearIncrementGCStats(env, false);
 			continue;
 		}
 
@@ -5610,6 +5626,7 @@ MM_Scavenger::scavengeIncremental(MM_EnvironmentBase *env)
 
 			result = true;
 			_concurrentPhase = concurrent_phase_idle;
+			omrtty_printf("scavengeIncremental complete -> idle\n");
 			timeout = true;
 		}
 			break;
@@ -5725,7 +5742,9 @@ MM_Scavenger::workThreadComplete(MM_EnvironmentStandard *env)
 uintptr_t
 MM_Scavenger::mainThreadConcurrentCollect(MM_EnvironmentBase *env)
 {
+	OMRPORT_ACCESS_FROM_OMRPORT(env->getPortLibrary());
 	if (concurrent_phase_scan == _concurrentPhase) {
+		omrtty_printf("mainThreadConcurrentCollect clearIncrementGCStats\n");
 		clearIncrementGCStats(env, false);
 
 		_currentPhaseConcurrent = true;
@@ -5760,6 +5779,8 @@ MM_Scavenger::mainThreadConcurrentCollect(MM_EnvironmentBase *env)
 			_activeSubSpace->flip(env, MM_MemorySubSpaceSemiSpace::disable_allocation);
 		}
 
+		omrtty_printf("mainThreadConcurrentCollect mergeIncrementGCStats\n");
+
 		mergeIncrementGCStats(env, false);
 
 		_delegate.cancelSignalToFlushCaches(env);
@@ -5767,6 +5788,8 @@ MM_Scavenger::mainThreadConcurrentCollect(MM_EnvironmentBase *env)
 		/* return the number of bytes scanned since the caller needs to pass it into postConcurrentUpdateStatsAndReport for stats reporting */
 		return scavengeTask.getBytesScanned();
 	} else {
+		omrtty_printf("mainThreadConcurrentCollect nothing done\n");
+
 		/* someone else might have done this phase (and the rest of the cycle), forced in STW, before we even got a chance to run. */
 		Assert_MM_true(concurrent_phase_idle == _concurrentPhase);
 		return 0;

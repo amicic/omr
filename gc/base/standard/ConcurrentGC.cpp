@@ -1280,6 +1280,15 @@ MM_ConcurrentGC::potentialFreeSpace(MM_EnvironmentBase *env, MM_AllocateDescript
 
 	uint64_t potentialFree = (uint64_t)currentNurseryFree + ((uint64_t)nurseryInitialFree * (uint64_t)scavengesRemaining);
 
+#if defined(OMR_GC_MODRON_CONCURRENT_MARK)
+	if (_extensions->debugConcurrentMark) {
+		OMRPORT_ACCESS_FROM_OMRPORT(env->getPortLibrary());
+		omrtty_printf("MM_ConcurrentGC::potentialFreeSpace: currentOldFree %zu headRoom %zu nurseryPromotion %zu scavengesRemainingHeadroom %f scavengesRemaining %zu currentNurseryFree %zu nurseryInitialFree %zu potentialFree %zu\n",
+		currentOldFree, headRoom, nurseryPromotion, scavengesRemainingHeadroom,	scavengesRemaining,	currentNurseryFree,	nurseryInitialFree,	potentialFree);
+	}
+#endif /* OMR_GC_MODRON_CONCURRENT_MARK */
+
+
 #if !defined(OMR_ENV_DATA64)
 	/* On a 32 bit platforms the amount of free space could be more than 4G. Therefore
 	 * if the amount of potential free space is greater than can be expressed in 32
