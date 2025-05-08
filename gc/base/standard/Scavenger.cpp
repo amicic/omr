@@ -762,6 +762,8 @@ MM_Scavenger::reportGCEnd(MM_EnvironmentStandard *env)
 void
 MM_Scavenger::clearThreadGCStats(MM_EnvironmentBase *env, bool firstIncrement)
 {
+	OMRPORT_ACCESS_FROM_ENVIRONMENT(env);
+	omrtty_printf("clearThreadGCStats worker %zu firstIncrement %zu\n", env->getWorkerID(), (uintptr_t)firstIncrement);
 	env->_scavengerStats.clear(firstIncrement);
 }
 
@@ -1020,6 +1022,8 @@ MM_Scavenger::calcGCStats(MM_EnvironmentStandard *env)
 			scavengerGCStats->_avgTenureBytesDeviation = (uintptr_t)MM_Math::weightedAverage((float)scavengerGCStats->_avgTenureBytesDeviation,
 																				MM_Math::abs(tenureBytesDeviation),
 																				TENURE_BYTES_HISTORY_WEIGHT);
+
+			_averageFlipBytes = (uintptr_t)MM_Math::weightedAverage((float)_averageFlipBytes, (float)scavengerGCStats->_flipBytes, 0.5f);
 		} else {
 			scavengerGCStats->_avgInitialFree = initialFree;
 
@@ -2575,10 +2579,30 @@ MM_Scavenger::completeScan(MM_EnvironmentStandard *env)
 	}
 
 	MM_CopyScanCacheStandard *scanCache = NULL;
-	while(NULL != (scanCache = getNextScanCache(env))) {
+	while (NULL != (scanCache = getNextScanCache(env))) {
 #if defined(OMR_SCAVENGER_TRACE)
 		omrtty_printf("{SCAV: Completing scan (%p) %p-%p-%p-%p}\n", scanCache, scanCache->cacheBase, scanCache->cacheAlloc, scanCache->scanCurrent, scanCache->cacheTop);
 #endif /* OMR_SCAVENGER_TRACE */
+		
+//		if (isConcurrentCycleInProgress() && (0 == (rand() % 10000))) {
+//
+//			uintptr_t *flipBytes = &_extensions->incrementScavengerStats._flipBytes;
+//			MM_AtomicOperations::add(flipBytes, env->_scavengerStats._flipBytes);
+//			env->_scavengerStats._flipBytes = 0;
+//
+//			uintptr_t freeMemory = _activeSubSpace->getMemorySubSpaceAllocate()->getApproximateActiveFreeMemorySize();
+//			uintptr_t totalMemory = _activeSubSpace->getMemorySubSpaceAllocate()->getActiveMemorySize();
+//
+//			omrtty_printf("completeScan worker %zu free/total mem %zu/%zu bytes %zu%% flipped %zu bytes %zu%% of total mem %zu%% of average flipped %zu\n",
+//					env->getWorkerID(),
+//					freeMemory,
+//					totalMemory,
+//					freeMemory / (totalMemory / 100),
+//					*flipBytes,
+//					*flipBytes / (totalMemory / 100),
+//					*flipBytes / (_averageFlipBytes / 100),
+//					_averageFlipBytes);
+//		}
 
 		switch (_extensions->scavengerScanOrdering) {
 		case MM_GCExtensionsBase::OMR_GC_SCAVENGER_SCANORDERING_BREADTH_FIRST:
@@ -2835,6 +2859,8 @@ MM_Scavenger::shouldRememberObject(MM_EnvironmentStandard *env, omrobjectptr_t o
 
 	GC_ObjectScannerState objectScannerState;
 
+	OMRPORT_ACCESS_FROM_ENVIRONMENT(env);
+
 	/* This method should be only called for RS pruning scan (whether in backout or not),
 	 * which is either single threaded (overflow or backout), or if multi-threaded it does no work sharing.
 	 * So we must not split, if it's indexable
@@ -2846,19 +2872,31 @@ MM_Scavenger::shouldRememberObject(MM_EnvironmentStandard *env, omrobjectptr_t o
 	if (shouldRemember) {
 		return true;
 	}
+	uintptr_t count = 0;
+
 	if (NULL != objectScanner) {
 		GC_SlotObject *slotPtr;
 		while (NULL != (slotPtr = objectScanner->getNextSlot())) {
 			omrobjectptr_t slotObjectPtr = slotPtr->readReferenceFromSlot();
 			if (shouldRememberSlot(&slotObjectPtr)) {
+				if (_extensions->objectModel.isIndexable(objectPtr) && (_extensions->indexableObjectModel.getSizeInElements((J9IndexableObject *)objectPtr) > 10000)) {
+					omrtty_printf("pruneRememberedSetList id %zu elements %zu scan count %zu\n", env->getWorkerID(), _extensions->indexableObjectModel.getSizeInElements((J9IndexableObject *)objectPtr), count);
+				}
 				return true;
 			}
+			count += 1;
 		}
 	}
+
+
 
 	/* The remembered state of a class object also depends on the class statics */
 	if (_extensions->objectModel.hasIndirectObjectReferents((CLI_THREAD_TYPE*)env->getLanguageVMThread(), objectPtr)) {
 		return _delegate.hasIndirectReferentsInNewSpace(env, objectPtr);
+	}
+
+	if (_extensions->objectModel.isIndexable(objectPtr) && (_extensions->indexableObjectModel.getSizeInElements((J9IndexableObject *)objectPtr) > 10000)) {
+		omrtty_printf("pruneRememberedSetList id %zu elements %zu scan count %zu\n", env->getWorkerID(), _extensions->indexableObjectModel.getSizeInElements((J9IndexableObject *)objectPtr), count);
 	}
 
 	return false;
@@ -3022,10 +3060,10 @@ MM_Scavenger::pruneRememberedSetList(MM_EnvironmentStandard *env)
 #endif /* OMR_SCAVENGER_TRACE_REMEMBERED_SET */
 
 	GC_SublistIterator remSetIterator(&(_extensions->rememberedSet));
-	while((puddle = remSetIterator.nextList()) != NULL) {
-		if(J9MODRON_HANDLE_NEXT_WORK_UNIT(env)) {
+	while ((puddle = remSetIterator.nextList()) != NULL) {
+		if (J9MODRON_HANDLE_NEXT_WORK_UNIT(env)) {
 			GC_SublistSlotIterator remSetSlotIterator(puddle);
-			while((slotPtr = (omrobjectptr_t *)remSetSlotIterator.nextSlot()) != NULL) {
+			while ((slotPtr = (omrobjectptr_t *)remSetSlotIterator.nextSlot()) != NULL) {
 				objectPtr = *slotPtr;
 
 				if (NULL == objectPtr) {
@@ -3533,6 +3571,32 @@ MM_Scavenger::clearCache(MM_EnvironmentStandard *env, MM_CopyScanCacheStandard *
 				Assert_MM_true(NULL == env->_survivorTLHRemainderTop);
 				env->_survivorTLHRemainderTop = cache->cacheTop;
 			}
+
+			//	if (isConcurrentCycleInProgress() && (0 == (rand() % 10000))) {
+				if (isConcurrentCycleInProgress() && (env->_scavengerStats._flipBytes > 65536)) {
+					OMRPORT_ACCESS_FROM_ENVIRONMENT(env);
+
+					uintptr_t freeMemory = _activeSubSpace->getMemorySubSpaceAllocate()->getApproximateActiveFreeMemorySize();
+					uintptr_t totalMemory = _activeSubSpace->getMemorySubSpaceAllocate()->getActiveMemorySize();
+
+					uintptr_t *flipBytes = &_extensions->incrementScavengerStats._flipBytes;
+					MM_AtomicOperations::add(flipBytes, env->_scavengerStats._flipBytes);
+
+					omrtty_printf("clearCache worker %zu free/total mem %zu/%zu bytes %zu%% flipped local/global %zu/%zu bytes %zu%% of total mem %zu%% of average flipped %zu\n",
+							env->getWorkerID(),
+							freeMemory,
+							totalMemory,
+							freeMemory / (totalMemory / 100),
+							env->_scavengerStats._flipBytes,
+							*flipBytes,
+							*flipBytes / (totalMemory / 100),
+							*flipBytes / (_averageFlipBytes / 100),
+							_averageFlipBytes);
+
+
+					env->_scavengerStats._flipBytes = 0;
+
+				}
 		} else {
 			/*
 			 * In case if OMR_COPYSCAN_CACHE_TYPE_SPLIT_ARRAY flag is set none of
@@ -5665,6 +5729,8 @@ MM_Scavenger::workThreadProcessRoots(MM_EnvironmentStandard *env)
 void
 MM_Scavenger::workThreadScan(MM_EnvironmentStandard *env)
 {
+	OMRPORT_ACCESS_FROM_ENVIRONMENT(env);
+	omrtty_printf("workThreadScan id %zu\n", env->getWorkerID());
 	/* This is where the most of scan work should occur in CS. Typically as a concurrent task (background threads), but in some corner cases it could be scheduled as a STW task */
 	clearThreadGCStats(env, false);
 
@@ -5728,7 +5794,7 @@ MM_Scavenger::workThreadComplete(MM_EnvironmentStandard *env)
 		}
 	}
 
-	if(isBackOutFlagRaised()) {
+	if (isBackOutFlagRaised()) {
 		env->_scavengerStats._backout = 1;
 		completeBackOut(env);
 	} else {

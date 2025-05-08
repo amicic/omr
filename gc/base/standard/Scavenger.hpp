@@ -90,7 +90,7 @@ private:
 	MM_ParallelDispatcher *_dispatcher;
 
 	volatile uintptr_t _doneIndex; /**< sequence ID of completeScan loop, which we may have a few during one GC cycle */
-
+public:
 	MM_MemorySubSpaceSemiSpace *_activeSubSpace; /**< top level new subspace subject to GC */
 	MM_MemorySubSpace *_evacuateMemorySubSpace; /**< cached pointer to evacuate subspace within active subspace */
 	MM_MemorySubSpace *_survivorMemorySubSpace; /**< cached pointer to survivor subspace within active subspace */
@@ -104,6 +104,7 @@ private:
 	bool _failedTenureThresholdReached;
 	uintptr_t _failedTenureLargestObject;
 	uintptr_t _countSinceForcingGlobalGC;
+	uintptr_t _averageFlipBytes;
 
 	bool _expandTenureOnFailedAllocate;
 	bool _cachedSemiSpaceResizableFlag;
@@ -957,6 +958,7 @@ public:
 		, _expandFailed(false)
 		, _failedTenureThresholdReached(false)
 		, _countSinceForcingGlobalGC(0)
+		, _averageFlipBytes(100)
 		, _expandTenureOnFailedAllocate(true)
 		, _minTenureFailureSize(UDATA_MAX)
 		, _minSemiSpaceFailureSize(UDATA_MAX)
