@@ -2293,6 +2293,7 @@ MM_Scavenger::flushBuffersForGetNextScanCache(MM_EnvironmentStandard *env, bool 
 bool
 MM_Scavenger::shouldDoFinalNotify(MM_EnvironmentStandard *env)
 {
+	OMRPORT_ACCESS_FROM_ENVIRONMENT(env);
 #if defined(OMR_GC_CONCURRENT_SCAVENGER)
 	if (_extensions->concurrentScavengeExhaustiveTermination && isCurrentPhaseConcurrent() && !_scavengeCacheFreeList.areAllCachesReturned()) {
 
@@ -2300,36 +2301,79 @@ MM_Scavenger::shouldDoFinalNotify(MM_EnvironmentStandard *env)
 		 * Activate Async Signal handler which will force Mutator threads to flush their copy caches for scanning. */
 		_delegate.signalThreadsToFlushCaches(env);
 
-		/* If no work has been created and no one requested to yeild meanwhile, go and wait for new work */
+		/* If no work has been created and no one requested to yeild meanwhile, go and wait for new work. */
 		if (!checkAndSetShouldYieldFlag(env)) {
-			if (0 == _cachedEntryCount) {
-				Assert_MM_true(!_scavengeCacheFreeList.areAllCachesReturned());
+			/* Meanwhile, mutator might have raced and released caches - check again. */
+			if (!_scavengeCacheFreeList.areAllCachesReturned()) {
+				if (0 == _cachedEntryCount)  {
+					omrtty_printf("shouldDoFinalNotify (1) getApproximateEntryCount() %zu _totalAllocatedEntryCount %zu\n", _scavengeCacheFreeList.getApproximateEntryCount(), _scavengeCacheFreeList._totalAllocatedEntryCount);
+					//Assert_MM_true(!_scavengeCacheFreeList.areAllCachesReturned());
 
-				/* The only known reason for timeout is a rare case if Exclusive VM Access request came from a nonGC party. If we did not have a timeout,
-				 * we would end up wating for mutator threads that hold Copy Caches, but they would not respond if they already released VM access
-				 * and blocked due to ongoing Exclusive, hence creating deadlock. Timeout of 1ms gives a chance to check if we should yield and release VM access.
-				 * Alternative solutions to providing timeout to consider in future:
-				 * 1) notify (via hook) GC that Exclusive is requested (proven to work, but breaks general async nature of how Exclusive Request is requested)
-				 * 2) release VM access prior to blocking (tricky since thread that blocks is not necessarily Main, which is the one that holds VM access)
-				 */
-				omrthread_monitor_wait_timed(_scanCacheMonitor, 1, 0);
+					/* The only known reason for timeout is a rare case if Exclusive VM Access request came from a nonGC party. If we did not have a timeout,
+					 * we would end up wating for mutator threads that hold Copy Caches, but they would not respond if they already released VM access
+					 * and blocked due to ongoing Exclusive, hence creating deadlock. Timeout of 1ms gives a chance to check if we should yield and release VM access.
+					 * Alternative solutions to providing timeout to consider in future:
+					 * 1) notify (via hook) GC that Exclusive is requested (proven to work, but breaks general async nature of how Exclusive Request is requested)
+					 * 2) release VM access prior to blocking (tricky since thread that blocks is not necessarily Main, which is the one that holds VM access)
+					 */
+					omrthread_monitor_wait_timed(_scanCacheMonitor, 1, 0);
+				}
+				/* We know there is more work - can't do the final notify yet. Need to help with work and eventually re-evaulate if it's really the end. */
+				return false;
+			} else {
+				omrtty_printf("shouldDoFinalNotify (2) getApproximateEntryCount() %zu _totalAllocatedEntryCount %zu\n", _scavengeCacheFreeList.getApproximateEntryCount(), _scavengeCacheFreeList._totalAllocatedEntryCount);
 			}
-			/* We know there is more work - can't do the final notify yet. Need to help with work and eventually re-evaulate if it's really the end */
-			return false;
+		} else {
+			omrtty_printf("shouldDoFinalNotify (3) getApproximateEntryCount() %zu _totalAllocatedEntryCount %zu\n", _scavengeCacheFreeList.getApproximateEntryCount(), _scavengeCacheFreeList._totalAllocatedEntryCount);
 		}
-		/* If we have to yield, we do need to notify worker threads to unblock and temporarily completely scan loop */
+		/* If we have to yield, we do need to notify worker threads to unblock and temporarily complete scan loop. */
 	}
 #endif /* #if defined(OMR_GC_CONCURRENT_SCAVENGER) */
 	return true;
 }
 
+
+MMINLINE MM_CopyScanCacheStandard *
+MM_Scavenger::getNextScanCacheFromThread(MM_EnvironmentStandard *env)
+{
+	MM_CopyScanCacheStandard *cache = NULL;
+
+	/* Preference is to use survivor copy cache. */
+	cache = env->_survivorCopyScanCache;
+	if (isWorkAvailableInCacheWithCheck(cache)) {
+		return cache;
+	}
+
+	/* Otherwise the tenure copy cache. */
+	cache = env->_tenureCopyScanCache;
+	if (isWorkAvailableInCacheWithCheck(cache)) {
+		return cache;
+	}
+
+	cache = env->_deferredScanCache;
+	if (NULL != cache) {
+		/* There is deferred scanning to do from partial depth first scanning. */
+		env->_deferredScanCache = NULL;
+		return cache;
+	}
+
+	cache = env->_deferredCopyCache;
+	if (NULL != cache) {
+		/* Deferred copy caches are used to merge memory-contiguous caches that got chopped up due to large objects not fitting and resuing remainder.
+		 * We want to delay scanning them as much as possible (up to the size of the original cache size being chopped up),
+		 * but we still want to do it before we synchronizing on scan queue and realizing no more work is available. */
+		Assert_MM_true(0 != (cache->flags & OMR_COPYSCAN_CACHE_TYPE_COPY));
+		cache->flags &= ~OMR_COPYSCAN_CACHE_TYPE_COPY;
+		env->_deferredCopyCache = NULL;
+		return cache;
+	}
+
+	return cache;
+}
+
 MM_CopyScanCacheStandard *
 MM_Scavenger::getNextScanCache(MM_EnvironmentStandard *env)
 {
-	MM_CopyScanCacheStandard *cache = NULL;
-	bool doneFlag = false;
-	volatile uintptr_t doneIndex = _doneIndex;
-
 	OMRPORT_ACCESS_FROM_OMRPORT(env->getPortLibrary());
 
 	if (checkAndSetShouldYieldFlag(env)) {
@@ -2345,34 +2389,13 @@ MM_Scavenger::getNextScanCache(MM_EnvironmentStandard *env)
 	}
 
 	/* Preference is to use survivor copy cache */
-	cache = env->_survivorCopyScanCache;
-	if (isWorkAvailableInCacheWithCheck(cache)) {
-		return cache;
-	}
-
-	/* Otherwise the tenure copy cache */
-	cache = env->_tenureCopyScanCache;
-	if (isWorkAvailableInCacheWithCheck(cache)) {
-		return cache;
-	}
-
-	cache = env->_deferredScanCache;
+	MM_CopyScanCacheStandard *cache = getNextScanCacheFromThread(env);
 	if (NULL != cache) {
-		/* there is deferred scanning to do from partial depth first scanning */
-		env->_deferredScanCache = NULL;
 		return cache;
 	}
 
-	cache = env->_deferredCopyCache;
-	if (NULL != cache) {
-		/* deferred copy caches are used to merge memory-contiguous caches that got chopped up due to large objects not fitting and resuing remainder.
-		 * we want to delay scanning them as much as possible (up to the size of the original cache size being chopped up),
-		 * but we still want to do it before we synchronizing on scan queue and realizing no more work is awailable */
-		Assert_MM_true(0 != (cache->flags & OMR_COPYSCAN_CACHE_TYPE_COPY));
-		cache->flags &= ~OMR_COPYSCAN_CACHE_TYPE_COPY;
-		env->_deferredCopyCache = NULL;
-		return cache;
-	}
+	bool doneFlag = false;
+	volatile uintptr_t doneIndex = _doneIndex;
 
 #if defined(J9MODRON_TGC_PARALLEL_STATISTICS)
 	env->_scavengerStats._acquireScanListCount += 1;
@@ -5999,14 +6022,20 @@ MM_Scavenger::payAllocationTax(MM_EnvironmentBase *envBase, MM_MemorySubSpace *s
 		 */
 		uint64_t totalScanTime = 0;
 		bool workDone = false;
+		uintptr_t iteration = 0;
+		uintptr_t iterationFromList = 0;
 
 		/* Yet to provide a meaningful heuristic (current one should never trigger). */
-		while (((1.0f + flipBytesRatio) < usedMemoryRatio) && (totalScanTime < 1000)) {
+		while (((-0.1f + flipBytesRatio) < usedMemoryRatio) && (totalScanTime < 2000)) {
+			iteration += 1;
+			MM_CopyScanCacheStandard *scanCache = getNextScanCacheFromThread(env);
 
-			MM_CopyScanCacheStandard *scanCache = getNextScanCacheFromList(env);
+			if (NULL == scanCache) {
+				iterationFromList += 1;
+				scanCache = getNextScanCacheFromList(env);
+			}
 
 			if (NULL != scanCache) {
-
 				if (!workDone) {
 					Assert_MM_true(NULL == env->_cycleState);
 					env->_cycleState = &_cycleState;
@@ -6039,6 +6068,20 @@ MM_Scavenger::payAllocationTax(MM_EnvironmentBase *envBase, MM_MemorySubSpace *s
 		}
 
 		if (workDone) {
+
+			omrtty_printf("MM_Scavenger::payAllocationTax envID %zu iteration %zu/%zu free/total mem %zu/%zu used bytes %.3f flipped global %zu bytes %zu%% of total mem; %.3f of average expected flipped %zu total scan %zuus\n",
+					env->getEnvironmentId(),
+					iteration,
+					iterationFromList,
+					freeMemory,
+					totalMemory,
+					usedMemoryRatio,
+					flipBytes,
+					flipBytes / (totalMemory / 100),
+					flipBytesRatio,
+					_extensions->scavengerStats._avgExpectedFlipBytes,
+					totalScanTime);
+
 			_delegate.flushReferenceObjects(env);
 
 			Assert_MM_true(env->_cycleState == &_cycleState);
