@@ -762,6 +762,8 @@ MM_Scavenger::reportGCEnd(MM_EnvironmentStandard *env)
 void
 MM_Scavenger::clearThreadGCStats(MM_EnvironmentBase *env, bool firstIncrement)
 {
+	OMRPORT_ACCESS_FROM_ENVIRONMENT(env);
+	omrtty_printf("clearThreadGCStats worker %zu firstIncrement %zu\n", env->getWorkerID(), (uintptr_t)firstIncrement);
 	env->_scavengerStats.clear(firstIncrement);
 }
 
@@ -1020,6 +1022,8 @@ MM_Scavenger::calcGCStats(MM_EnvironmentStandard *env)
 			scavengerGCStats->_avgTenureBytesDeviation = (uintptr_t)MM_Math::weightedAverage((float)scavengerGCStats->_avgTenureBytesDeviation,
 																				MM_Math::abs(tenureBytesDeviation),
 																				TENURE_BYTES_HISTORY_WEIGHT);
+
+			_averageFlipBytes = (uintptr_t)MM_Math::weightedAverage((float)_averageFlipBytes, (float)scavengerGCStats->_flipBytes, 0.5f);
 		} else {
 			scavengerGCStats->_avgInitialFree = initialFree;
 
@@ -2575,10 +2579,30 @@ MM_Scavenger::completeScan(MM_EnvironmentStandard *env)
 	}
 
 	MM_CopyScanCacheStandard *scanCache = NULL;
-	while(NULL != (scanCache = getNextScanCache(env))) {
+	while (NULL != (scanCache = getNextScanCache(env))) {
 #if defined(OMR_SCAVENGER_TRACE)
 		omrtty_printf("{SCAV: Completing scan (%p) %p-%p-%p-%p}\n", scanCache, scanCache->cacheBase, scanCache->cacheAlloc, scanCache->scanCurrent, scanCache->cacheTop);
 #endif /* OMR_SCAVENGER_TRACE */
+		
+		if (isConcurrentCycleInProgress() && (0 == (rand() % 10000))) {
+
+			uintptr_t *flipBytes = &_extensions->incrementScavengerStats._flipBytes;
+			MM_AtomicOperations::add(flipBytes, env->_scavengerStats._flipBytes);
+			env->_scavengerStats._flipBytes = 0;
+
+			uintptr_t freeMemory = _activeSubSpace->getMemorySubSpaceAllocate()->getApproximateActiveFreeMemorySize();
+			uintptr_t totalMemory = _activeSubSpace->getMemorySubSpaceAllocate()->getActiveMemorySize();
+
+			omrtty_printf("completeScan worker %zu free/total mem %zu/%zu bytes %zu%% flipped %zu bytes %zu%% of total mem %zu%% of average flipped %zu\n",
+					env->getWorkerID(),
+					freeMemory,
+					totalMemory,
+					freeMemory / (totalMemory / 100),
+					*flipBytes,
+					*flipBytes / (totalMemory / 100),
+					*flipBytes / (_averageFlipBytes / 100),
+					_averageFlipBytes);
+		}
 
 		switch (_extensions->scavengerScanOrdering) {
 		case MM_GCExtensionsBase::OMR_GC_SCAVENGER_SCANORDERING_BREADTH_FIRST:
