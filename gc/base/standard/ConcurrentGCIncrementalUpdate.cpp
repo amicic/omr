@@ -1092,6 +1092,7 @@ MM_ConcurrentGCIncrementalUpdate::localMark(MM_EnvironmentBase *env, uintptr_t s
 	Assert_MM_true(NULL == env->_cycleState);
 	Assert_MM_true(CONCURRENT_OFF < _stats.getExecutionMode());
 	Assert_MM_true(_concurrentCycleState._referenceObjectOptions == MM_CycleState::references_default);
+	Assert_MM_true(NULL == env->_cycleState);
 	env->_cycleState = &_concurrentCycleState;
 
 	uintptr_t sizeTraced = 0;

@@ -1405,8 +1405,18 @@ MM_ConcurrentGC::payAllocationTax(MM_EnvironmentBase *env, MM_MemorySubSpace *su
 		}
 	}
 
+	OMRPORT_ACCESS_FROM_ENVIRONMENT(env);
+	uint64_t startTime = omrtime_hires_clock();
+
 	/* Concurrent marking is active */
 	concurrentMark(env, subspace, allocDescription);
+
+	uint64_t intervalTime = omrtime_hires_delta(startTime, omrtime_hires_clock(), OMRPORT_TIME_DELTA_IN_MICROSECONDS);
+
+	if (0 == (rand() % 50)) {
+		omrtty_printf("MM_ConcurrentGC::payAllocationTax envID %zu %zuus\n", env->getEnvironmentId(), intervalTime);
+	}
+
 	/* Thread roots must have been flushed by this point */
 	Assert_MM_true(!_concurrentDelegate.flushThreadRoots(env));
 }
