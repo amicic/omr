@@ -1405,6 +1405,9 @@ MM_ConcurrentGC::payAllocationTax(MM_EnvironmentBase *env, MM_MemorySubSpace *su
 		}
 	}
 
+	OMRPORT_ACCESS_FROM_ENVIRONMENT(env);
+	omrtty_printf("MM_ConcurrentGC::payAllocationTax envID %zu\n", env->getEnvironmentId());
+
 	/* Concurrent marking is active */
 	concurrentMark(env, subspace, allocDescription);
 	/* Thread roots must have been flushed by this point */

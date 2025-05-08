@@ -470,6 +470,9 @@ MM_Scavenger::mainSetupForGC(MM_EnvironmentStandard *env)
 
 	_activeSubSpace->cacheRanges(_evacuateMemorySubSpace, &_evacuateSpaceBase, &_evacuateSpaceTop);
 	_activeSubSpace->cacheRanges(_survivorMemorySubSpace, &_survivorSpaceBase, &_survivorSpaceTop);
+	OMRPORT_ACCESS_FROM_ENVIRONMENT(env);
+	omrtty_printf("MM_Scavenger::mainSetupForGC evac %p-%p survivor(and allocate for CS) %p-%p\n", _evacuateSpaceBase, _evacuateSpaceTop, _survivorSpaceBase, _survivorSpaceTop);
+
 
 	/* assume that value of RS Overflow flag will not be changed until scavengeRememberedSet() call, so handle it first */
 	_isRememberedSetInOverflowAtTheBeginning = isRememberedSetInOverflowState();
@@ -769,12 +772,17 @@ MM_Scavenger::reportGCEnd(MM_EnvironmentStandard *env)
 void
 MM_Scavenger::clearThreadGCStats(MM_EnvironmentBase *env, bool firstIncrement)
 {
+	OMRPORT_ACCESS_FROM_ENVIRONMENT(env);
+	omrtty_printf("clearThreadGCStats env ID %zu GC worker %zu firstIncrement %zu\n", env->getEnvironmentId(), env->getWorkerID(), (uintptr_t)firstIncrement);
 	env->_scavengerStats.clear(firstIncrement);
 }
 
 void
 MM_Scavenger::clearIncrementGCStats(MM_EnvironmentBase *env, bool firstIncrement)
 {
+	OMRPORT_ACCESS_FROM_ENVIRONMENT(env);
+	omrtty_printf("clearIncrementGCStats env ID %zu GC worker %zu firstIncrement %zu\n", env->getEnvironmentId(), env->getWorkerID(), (uintptr_t)firstIncrement);
+
 	_extensions->incrementScavengerStats.clear(firstIncrement);
 
 	/* Increment start time doesn't need to be cleared, it was set prior to calling this method */
@@ -793,6 +801,7 @@ MM_Scavenger::clearCycleGCStats(MM_EnvironmentBase *env)
 void
 MM_Scavenger::mergeGCStatsBase(MM_EnvironmentBase *env, MM_ScavengerStats *finalGCStats, MM_ScavengerStats *scavStats)
 {
+	OMRPORT_ACCESS_FROM_ENVIRONMENT(env);
 	finalGCStats->_rememberedSetOverflow |= scavStats->_rememberedSetOverflow;
 	finalGCStats->_causedRememberedSetOverflow |= scavStats->_causedRememberedSetOverflow;
 	finalGCStats->_scanCacheOverflow |= scavStats->_scanCacheOverflow;
@@ -800,6 +809,9 @@ MM_Scavenger::mergeGCStatsBase(MM_EnvironmentBase *env, MM_ScavengerStats *final
 	finalGCStats->_scanCacheAllocationDurationDuringSavenger = OMR_MAX(finalGCStats->_scanCacheAllocationDurationDuringSavenger, scavStats->_scanCacheAllocationDurationDuringSavenger);
 
 	finalGCStats->_backout |= scavStats->_backout;
+	omrtty_printf("mergeGCStatsBase env ID %zu  _flipBytes current %zu adding %zu _tenureAggregateBytes current %zu adding %zu\n",
+			env->getEnvironmentId(), finalGCStats->_flipBytes, scavStats->_flipBytes, finalGCStats->_tenureAggregateBytes, scavStats->_tenureAggregateBytes);
+
 	finalGCStats->_tenureAggregateCount += scavStats->_tenureAggregateCount;
 	finalGCStats->_tenureAggregateBytes += scavStats->_tenureAggregateBytes;
 #if defined(OMR_GC_LARGE_OBJECT_AREA)
@@ -883,6 +895,7 @@ void
 MM_Scavenger::mergeThreadGCStats(MM_EnvironmentBase *env)
 {
 	OMRPORT_ACCESS_FROM_OMRVM(_omrVM);
+	omrtty_printf("mergeThreadGCStats env ID %zu\n", env->getEnvironmentId());
 
 	/* Protect the merge with the mutex (this is done by multiple threads in the parallel collector) */
 	omrthread_monitor_enter(_extensions->gcStatsMutex);
@@ -929,6 +942,9 @@ MM_Scavenger::mergeThreadGCStats(MM_EnvironmentBase *env)
 void
 MM_Scavenger::mergeIncrementGCStats(MM_EnvironmentBase *env, bool lastIncrement)
 {
+	OMRPORT_ACCESS_FROM_OMRVM(_omrVM);
+	omrtty_printf("mergeIncrementGCStats env ID %zu\n", env->getEnvironmentId());
+
 	Assert_MM_true(env->isMainThread());
 	MM_ScavengerStats *finalGCStats = &_extensions->scavengerStats;
 	mergeGCStatsBase(env, finalGCStats, &_extensions->incrementScavengerStats);
@@ -985,7 +1001,7 @@ MM_Scavenger::calcGCStats(MM_EnvironmentStandard *env)
 	/* Do not calculate stats unless we actually collected */
 	if (canCalcGCStats(env)) {
 		MM_ScavengerStats *scavengerGCStats = &_extensions->scavengerStats;
-		uintptr_t initialFree = env->_cycleState->_activeSubSpace->getActualActiveFreeMemorySize();
+		uintptr_t initialFree = _activeSubSpace->getActualActiveFreeMemorySize();
 		uintptr_t tenureAggregateBytes = 0;
 		float tenureBytesDeviation = 0;
 		uintptr_t survivorAllocated = 0;
@@ -1038,7 +1054,7 @@ MM_Scavenger::calcGCStats(MM_EnvironmentStandard *env)
 			scavengerGCStats->_avgTenureBytes = (uintptr_t)(scavengerGCStats->_flipBytes / 2);
 		}
 #if defined(OMR_GC_MODRON_CONCURRENT_MARK)
-			if (_extensions->debugConcurrentMark) {
+			//if (_extensions->debugConcurrentMark) {
 				OMRPORT_ACCESS_FROM_OMRPORT(env->getPortLibrary());
 				omrtty_printf(
 					"Tenured bytes: %zu\navgTenureBytes: %zu\ntenureBytesDeviation: %f\navgTenureBytesDeviation: %zu\ninitialFree: %zu\nsurvivorAllocated: %zu\navgInitialFree: %zu\n",
@@ -1049,7 +1065,9 @@ MM_Scavenger::calcGCStats(MM_EnvironmentStandard *env)
 					initialFree,
 					survivorAllocated,
 					scavengerGCStats->_avgInitialFree);
-			}
+			//}
+			omrtty_printf("_avgExpectedFlipBytes %zu\n", scavengerGCStats->_avgExpectedFlipBytes);
+
 #endif /* OMR_GC_MODRON_CONCURRENT_MARK */
 	}
 }
@@ -4392,6 +4410,9 @@ MM_Scavenger::mainThreadGarbageCollect(MM_EnvironmentBase *envBase, MM_AllocateD
 		 * Thus re-caching evacuate ranges to point to reserved/empty space of Survivor */
 		_evacuateMemorySubSpace = _activeSubSpace->getMemorySubSpaceSurvivor();
 		_activeSubSpace->cacheRanges(_evacuateMemorySubSpace, &_evacuateSpaceBase, &_evacuateSpaceTop);
+		OMRPORT_ACCESS_FROM_ENVIRONMENT(env);
+		omrtty_printf("MM_Scavenger::mainThreadGarbageCollect evac %p-%p\n", _evacuateSpaceBase, _evacuateSpaceTop);
+
 #endif
 		_extensions->heap->resetHeapStatistics(false);
 
@@ -4616,6 +4637,9 @@ MM_Scavenger::internalPreCollect(MM_EnvironmentBase *env, MM_MemorySubSpace *sub
 	}
 #endif /* defined(OMR_ENV_DATA64) && defined(OMR_GC_FULL_POINTERS) */
 
+	OMRPORT_ACCESS_FROM_ENVIRONMENT(env);
+	omrtty_printf("MM_Scavenger::internalPreCollect envID %zu setting cycle state\n", env->getEnvironmentId());
+
 	env->_cycleState = &_cycleState;
 
 #if defined(OMR_GC_CONCURRENT_SCAVENGER)
@@ -4700,7 +4724,9 @@ MM_Scavenger::internalGarbageCollect(MM_EnvironmentBase *envBase, MM_MemorySubSp
 	/* First, if the previous scavenge had a failed tenure of a size greater than the threshold,
 	 * ask parent MSS to try a collect.
 	 */
-	if (failedTenureThresholdReached()) {
+	// if we allow percolate on the last increment, global will go back to scavenge to complete it
+	// so let's simplify and just complete this and the next scavenge cycle will percoalate
+	if (failedTenureThresholdReached() && !isConcurrentCycleInProgress()) {
 		Trc_MM_Scavenger_percolate_failedTenureThresholdReached(env->getLanguageVMThread(), getFailedTenureLargestObject(), _extensions->heap->getPercolateStats()->getScavengesSincePercolate());
 
 		/* Create an allocate description to describe the size of the
@@ -4725,7 +4751,9 @@ MM_Scavenger::internalGarbageCollect(MM_EnvironmentBase *envBase, MM_MemorySubSp
 	/*
 	 * Second, if the previous scavenge failed to expand tenure, ask parent MSS to try a collect.
 	 */
-	if (expandFailed()) {
+	// if we allow percolate on the last increment, global will go back to scavenge to complete it
+	// so let's simplify and just complete this and the next scavenge cycle will percoalate
+	if (expandFailed() && !isConcurrentCycleInProgress()) {
 		Trc_MM_Scavenger_percolate_expandFailed(env->getLanguageVMThread());
 
 		/* We do an aggressive percolate if the last scavenge also percolated */
@@ -4884,6 +4912,8 @@ MM_Scavenger::percolateGarbageCollect(MM_EnvironmentBase *env,  MM_MemorySubSpac
 	/* save the cycle state since we are about to call back into the collector to start a new global cycle */
 	MM_CycleState *scavengeCycleState = env->_cycleState;
 	Assert_MM_true(NULL != scavengeCycleState);
+	OMRPORT_ACCESS_FROM_ENVIRONMENT(env);
+	omrtty_printf("MM_Scavenger::percolateGarbageCollect envID %zu remembering and clearing (scavenge) cycle state\n", env->getEnvironmentId());
 	env->_cycleState = NULL;
 
 	/* Set last percolate reason */
@@ -5582,6 +5612,9 @@ MM_Scavenger::threadReleaseCaches(MM_EnvironmentBase *currentEnvBase, MM_Environ
 		flushInactiveDeferredCopyScanCache(currentEnv, targetEnv, flushCaches, final);
 		deactivateDeferredCopyScanCache(currentEnv, targetEnv, flushCaches, final);
 
+		// todo: verify if we should really check isCurrentPhaseConcurrent
+		// we might miss to update flush some late stats if they are only done as part of EVMA flushGCCache thread iteration
+		// the point is that stats would still be from the concurrent work, even though they could be flushed in STW
 		if (flushCaches && (MUTATOR_THREAD == targetEnv->getThreadType()) && isCurrentPhaseConcurrent()) {
 			/* Flush copy byte stats from Mutator threads during the concurrent phase (via Read Barrier).
 			 * GC threads will merge the stats a bit later (STW or concurrent) when the rest of the stats are merged.
@@ -5618,6 +5651,19 @@ MM_Scavenger::threadReleaseCaches(MM_EnvironmentBase *currentEnvBase, MM_Environ
 		}
 
 		if (final) {
+			// does not hold, since it could be during thread termination
+			//Assert_MM_false(isCurrentPhaseConcurrent());
+
+			if (MUTATOR_THREAD == targetEnv->getThreadType()) {
+
+				// TODO: should be finalFlush = true?
+				/* Mutators through taxation can scan references - let's flush the local ref queue. */
+	//			OMRPORT_ACCESS_FROM_ENVIRONMENT(targetEnv);
+	//			omrtty_printf("MM_Scavenger::threadReleaseCaches env %zu about to flush\n", targetEnv->getEnvironmentId());
+
+				flushBuffersForGetNextScanCache(targetEnv);
+			}
+
 			/* If it's an intermediate release (mutator threads releasing VM access in a middle of CS cycle),
 			 * copy cache remainders are kept around (not abandoned yet), to be reused if the threads re-acquires VM access during the same CS cycle.
 			 * For the final release, even the remainders are abandoned.
@@ -5730,6 +5776,8 @@ MM_Scavenger::workThreadProcessRoots(MM_EnvironmentStandard *env)
 void
 MM_Scavenger::workThreadScan(MM_EnvironmentStandard *env)
 {
+	OMRPORT_ACCESS_FROM_ENVIRONMENT(env);
+	omrtty_printf("workThreadScan id %zu\n", env->getWorkerID());
 	/* This is where the most of scan work should occur in CS. Typically as a concurrent task (background threads), but in some corner cases it could be scheduled as a STW task */
 	clearThreadGCStats(env, false);
 
@@ -5861,8 +5909,11 @@ MM_Scavenger::mainThreadConcurrentCollect(MM_EnvironmentBase *env)
 void MM_Scavenger::preConcurrentInitializeStatsAndReport(MM_EnvironmentBase *env, MM_ConcurrentPhaseStatsBase *stats)
 {
 	OMRPORT_ACCESS_FROM_OMRPORT(env->getPortLibrary());
+	omrtty_printf("MM_Scavenger::preConcurrentInitializeStatsAndReport envID %zu\n", env->getEnvironmentId());
 	Assert_MM_true(NULL == env->_cycleState);
 	env->_cycleState = &_cycleState;
+	/* Recently set by switchConcurrentForThread. */
+	//Assert_MM_true(&_cycleState == env->_cycleState);
 
 	stats->_cycleID = _cycleState._verboseContextID;
 
@@ -5903,7 +5954,7 @@ MM_Scavenger::mergeReadBarrierStats(MM_EnvironmentBase *env)
 }
 
 void
-MM_Scavenger::switchConcurrentForThread(MM_EnvironmentBase *env)
+MM_Scavenger::switchConcurrentForThread(MM_EnvironmentBase *env, bool setCycleState)
 {
 	/* If a thread local counter is behind the global one (or ahead in case of a rollover), we need to trigger a switch.
 	 * It means we recently transitioned from a cycle start to cycle end or vice versa.
@@ -5915,7 +5966,29 @@ MM_Scavenger::switchConcurrentForThread(MM_EnvironmentBase *env)
 		Trc_MM_Scavenger_switchConcurrent(env->getLanguageVMThread(), _concurrentPhase, _concurrentScavengerSwitchCount, env->_concurrentScavengerSwitchCount);
 		env->_concurrentScavengerSwitchCount = _concurrentScavengerSwitchCount;
 		_delegate.switchConcurrentForThread(env);
+		OMRPORT_ACCESS_FROM_ENVIRONMENT(env);
+		if ((MUTATOR_THREAD == env->getThreadType()) && setCycleState) {
+			if (isConcurrentCycleInProgress()) {
+				// could be back to back cycles without releasing EVMA, hence no chance to clear cycle state (what is done by VM access hook)
+				// Assert_MM_true(NULL == env->_cycleState);
+				omrtty_printf("MM_Scavenger::switchConcurrentForThread envID %zu thread type %zu worker ID %zu CS in progress %zu setting cycle state\n",
+						env->getEnvironmentId(), env->getThreadType(), env->getWorkerID(), (uintptr_t)isConcurrentCycleInProgress());
+				env->_cycleState = &_cycleState;
+			} else {
+				//if (!env->isMainThread()) {
+					// perhaps these asserts make sense before env->_concurrentScavengerSwitchCount is updated and only if the value is _concurrentScavengerSwitchCount - 1
+					//Assert_MM_true(&_cycleState == env->_cycleState);
+				omrtty_printf("MM_Scavenger::switchConcurrentForThread envID %zu thread type %zu worker ID %zu CS in progress %zu clearing cycle state\n",
+						env->getEnvironmentId(), env->getThreadType(), env->getWorkerID(), (uintptr_t)isConcurrentCycleInProgress());
+					env->_cycleState = NULL;
+				//}
+			}
+		} else {
+			omrtty_printf("MM_Scavenger::switchConcurrentForThread envID %zu thread type %zu worker ID %zu CS in progress %zu ignoring cycle state\n",
+					env->getEnvironmentId(), env->getThreadType(), env->getWorkerID(), (uintptr_t)isConcurrentCycleInProgress());
+		}
 	}
+
 }
 
 void
@@ -5941,30 +6014,37 @@ MM_Scavenger::triggerConcurrentScavengerTransition(MM_EnvironmentBase *env, MM_A
 	}
 
 	/* For this thread too directly */
-	switchConcurrentForThread(env);
+	switchConcurrentForThread(env, false);
 }
 
 void
 MM_Scavenger::completeConcurrentCycle(MM_EnvironmentBase *env, MM_MemorySubSpace *subSpace, MM_AllocateDescription *allocDescription, uint32_t gcCode)
 {
 	/* This is supposed to be called by an external cycle (for example ConcurrentGC, STW phase)
-	 * that is just to be started, but cannot before Scavenger is complete.
+	 * which is just to be started, but cannot before Scavenger is complete.
 	 * On this path, calling subSpace is Generational (while typically Scavenger::postCollect would be called from SemiSpace).
 	 */
-	Assert_MM_true(NULL == env->_cycleState);
 	if (isConcurrentCycleInProgress()) {
+		// mutators now have _cycleState state set, so that can do GC work
+		Assert_MM_true(&_cycleState == env->_cycleState);
+		env->_cycleState = NULL;
+
 		internalPreCollect(env, subSpace, allocDescription, gcCode);
 
 		triggerConcurrentScavengerTransition(env, allocDescription);
 
 		internalPostCollect(env, subSpace);
+		Assert_MM_true(&_cycleState == env->_cycleState);
 		env->_cycleState = NULL;
 	}
 }
 
 void
-MM_Scavenger::payAllocationTax(MM_EnvironmentBase *env, MM_MemorySubSpace *subspace, MM_MemorySubSpace *baseSubSpace, MM_AllocateDescription *allocDescription)
+MM_Scavenger::payAllocationTax(MM_EnvironmentBase *envBase, MM_MemorySubSpace *subspace, MM_MemorySubSpace *baseSubSpace, MM_AllocateDescription *allocDescription)
 {
+	MM_EnvironmentStandard *env = MM_EnvironmentStandard::getEnvironment(envBase);
+
+	OMRPORT_ACCESS_FROM_ENVIRONMENT(env);
 	if (isCurrentPhaseConcurrent()) {
 		uintptr_t freeMemory = _activeSubSpace->getMemorySubSpaceAllocate()->getApproximateActiveFreeMemorySize();
 		uintptr_t totalMemory = _activeSubSpace->getMemorySubSpaceAllocate()->getActiveMemorySize();
@@ -5983,9 +6063,28 @@ MM_Scavenger::payAllocationTax(MM_EnvironmentBase *env, MM_MemorySubSpace *subsp
 		/* If flip progress is too low (too small Nursery, background GC threads starved by CPU overloading,...)
 		 * mutator threads need to be taxed to slow down their heap allocation and CPU consumption.
 		 */
-		if ((1.0f + flipBytesRatio) < usedMemoryRatio) {
+		if ((0.2f + flipBytesRatio) < usedMemoryRatio) {
 			/* Yet to provide a meaningful heuristic (current one should never trigger). */
-			omrthread_sleep(1);
+
+			//omrthread_sleep(1);
+			MM_CopyScanCacheStandard *scanCache = getNextScanCacheFromList(env);
+
+			if (NULL != scanCache) {
+				omrtty_printf("MM_Scavenger::payAllocationTax envID %zu free/total mem %zu/%zu used bytes %.3f flipped global %zu bytes %zu%% of total mem; %.3f of average expected flipped %zu cache scan %p alloc %p top %p\n",
+						env->getEnvironmentId(),
+						freeMemory,
+						totalMemory,
+						usedMemoryRatio,
+						flipBytes,
+						flipBytes / (totalMemory / 100),
+						flipBytesRatio,
+						_extensions->scavengerStats._avgExpectedFlipBytes,
+						scanCache->scanCurrent,
+						scanCache->cacheAlloc,
+						scanCache->cacheTop);
+
+				completeScanCache(env, scanCache);
+			}
 		}
 	}
 }

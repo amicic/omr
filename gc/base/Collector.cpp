@@ -491,10 +491,15 @@ MM_Collector::garbageCollect(MM_EnvironmentBase* env, MM_MemorySubSpace* calling
 	Assert_MM_mustHaveExclusiveVMAccess(env->getOmrVMThread());
 
 	uintptr_t vmState = env->pushVMstate(getVMStateID());
+	OMRPORT_ACCESS_FROM_ENVIRONMENT(env);
 
-	Assert_MM_true(NULL == env->_cycleState);
+	// TODO: ideally, we should not have CS specifics in this common path
+	MM_GCExtensionsBase *extensions = env->getExtensions();
+	Assert_MM_true((NULL == env->_cycleState) || extensions->isConcurrentScavengerInProgress());
 	preCollect(env, callingSubSpace, allocateDescription, gcCode);
 	Assert_MM_true(NULL != env->_cycleState);
+	omrtty_printf("MM_Collector::garbageCollect envID %zu ignoring (non-null) cycle state; set by a specific preCollect\n", env->getEnvironmentId());
+
 
 	/* ensure that we aren't trying to collect while in a NoGC allocation */
 	Assert_MM_false(env->_isInNoGCAllocationCall);
@@ -524,7 +529,12 @@ MM_Collector::garbageCollect(MM_EnvironmentBase* env, MM_MemorySubSpace* calling
 	/* finally, run postCollect */
 	postCollect(env, callingSubSpace);
 	Assert_MM_true(NULL != env->_cycleState);
+	if (env->getExtensions()->isConcurrentScavengerInProgress()) {
+		omrtty_printf("MM_Collector::garbageCollect envID %zu CS cycle in progress ignoring cycle state\n", env->getEnvironmentId());
+	} else {
+	omrtty_printf("MM_Collector::garbageCollect envID %zu clearing cycle state\n", env->getEnvironmentId());
 	env->_cycleState = NULL;
+	}
 
 	env->popVMstate(vmState);
 

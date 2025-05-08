@@ -519,6 +519,9 @@ MM_MemorySubSpaceSemiSpace::flip(MM_EnvironmentBase *env, Flip_step step)
 			_memorySubSpaceSurvivor = _memorySubSpaceEvacuate;
 			cacheRanges(_memorySubSpaceAllocate, &_allocateSpaceBase, &_allocateSpaceTop);
 			cacheRanges(_memorySubSpaceSurvivor, &_survivorSpaceBase, &_survivorSpaceTop);
+			OMRPORT_ACCESS_FROM_ENVIRONMENT(env);
+			omrtty_printf("MM_MemorySubSpaceSemiSpace::flip backout alloc %p-%p survivor %p-%p\n", _allocateSpaceBase, _allocateSpaceTop, _survivorSpaceBase, _survivorSpaceTop);
+
 			Trc_MM_MSSSS_flip_backout(
 				env->getLanguageVMThread(),
 				"forced flip ",
@@ -608,6 +611,8 @@ MM_MemorySubSpaceSemiSpace::mainSetupForGC(MM_EnvironmentBase *env)
 	/* cache allocate (effectively evacuate for GC) ranges */
 	cacheRanges(_memorySubSpaceAllocate, &_allocateSpaceBase, &_allocateSpaceTop);
 	cacheRanges(_memorySubSpaceSurvivor, &_survivorSpaceBase, &_survivorSpaceTop);
+	OMRPORT_ACCESS_FROM_ENVIRONMENT(env);
+	omrtty_printf("MM_MemorySubSpaceSemiSpace::mainSetupForGC alloc %p-%p survivor %p-%p about to set evac...\n", _allocateSpaceBase, _allocateSpaceTop, _survivorSpaceBase, _survivorSpaceTop);
 
 	flip(env, set_evacuate);
 }

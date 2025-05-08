@@ -99,6 +99,8 @@ MM_EnvironmentStandard::flushGCCaches(bool final)
 	if (getExtensions()->concurrentScavenger) {
 		if (MUTATOR_THREAD == getThreadType()) {
 			if (NULL != getExtensions()->scavenger) {
+//				OMRPORT_ACCESS_FROM_ENVIRONMENT(this);
+//				omrtty_printf("MM_EnvironmentStandard::flushGCCaches env %zu about to threadReleaseCaches\n", getEnvironmentId());
 				getExtensions()->scavenger->threadReleaseCaches(NULL, this, true, final);
 			}
 		}

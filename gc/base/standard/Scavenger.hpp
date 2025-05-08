@@ -818,7 +818,7 @@ public:
 	/**
 	 * Enabled/disable approriate thread local resources when starting or finishing Concurrent Scavenger Cycle
 	 */ 
-	void switchConcurrentForThread(MM_EnvironmentBase *env);	
+	void switchConcurrentForThread(MM_EnvironmentBase *env, bool setCycleState = true);
 	
 	void reportConcurrentScavengeStart(MM_EnvironmentStandard *env);
 	void reportConcurrentScavengeEnd(MM_EnvironmentStandard *env);
