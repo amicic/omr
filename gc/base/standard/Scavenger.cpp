@@ -353,11 +353,17 @@ MM_Scavenger::collectorStartup(MM_GCExtensionsBase* extensions)
 	}
 #endif /* OMR_GC_CONCURRENT_SCAVENGER */
 
+<<<<<<< Upstream, based on github-omr/master
 	/* There is no history, but during startup survivor ratio is relatively high, say 1/4 of Allocate (which is initially 1/2 of Nursery).
 	 * For very large initial heap/Nursery, it may not be that high, so it's additionally capped.
 	 * Need to initialize this before first cycle start (may be used by concurrent phase), but it's too early in initialize(), since heap is not created, yet.
 	 */
 	_extensions->scavengerStats._avgExpectedFlipBytes = OMR_MIN(_extensions->heap->getActiveMemorySize(MEMORY_TYPE_NEW) / 8, (uintptr_t)128 * 1024 * 1024);
+=======
+	/* There is no history, but during startup surivivor ratio is relatively high, say 1/4 of Allocate (which is initially 1/2 of Nursery).
+	 * For very large initial heap/Nursery, it may not be that high, so it's additionally capped. */
+	_averageExpectedFlipBytes = OMR_MIN(_extensions->heap->getActiveMemorySize(MEMORY_TYPE_NEW) / 8, (uintptr_t)128 * 1024 * 1024);
+>>>>>>> 014769b cs tax
 
 	return true;
 }
@@ -769,12 +775,17 @@ MM_Scavenger::reportGCEnd(MM_EnvironmentStandard *env)
 void
 MM_Scavenger::clearThreadGCStats(MM_EnvironmentBase *env, bool firstIncrement)
 {
+	OMRPORT_ACCESS_FROM_ENVIRONMENT(env);
+	omrtty_printf("clearThreadGCStats env ID %zu GC worker %zu firstIncrement %zu\n", env->getEnvironmentId(), env->getWorkerID(), (uintptr_t)firstIncrement);
 	env->_scavengerStats.clear(firstIncrement);
 }
 
 void
 MM_Scavenger::clearIncrementGCStats(MM_EnvironmentBase *env, bool firstIncrement)
 {
+	OMRPORT_ACCESS_FROM_ENVIRONMENT(env);
+	omrtty_printf("clearIncrementGCStats env ID %zu GC worker %zu firstIncrement %zu\n", env->getEnvironmentId(), env->getWorkerID(), (uintptr_t)firstIncrement);
+
 	_extensions->incrementScavengerStats.clear(firstIncrement);
 
 	/* Increment start time doesn't need to be cleared, it was set prior to calling this method */
@@ -793,6 +804,7 @@ MM_Scavenger::clearCycleGCStats(MM_EnvironmentBase *env)
 void
 MM_Scavenger::mergeGCStatsBase(MM_EnvironmentBase *env, MM_ScavengerStats *finalGCStats, MM_ScavengerStats *scavStats)
 {
+	OMRPORT_ACCESS_FROM_ENVIRONMENT(env);
 	finalGCStats->_rememberedSetOverflow |= scavStats->_rememberedSetOverflow;
 	finalGCStats->_causedRememberedSetOverflow |= scavStats->_causedRememberedSetOverflow;
 	finalGCStats->_scanCacheOverflow |= scavStats->_scanCacheOverflow;
@@ -800,6 +812,9 @@ MM_Scavenger::mergeGCStatsBase(MM_EnvironmentBase *env, MM_ScavengerStats *final
 	finalGCStats->_scanCacheAllocationDurationDuringSavenger = OMR_MAX(finalGCStats->_scanCacheAllocationDurationDuringSavenger, scavStats->_scanCacheAllocationDurationDuringSavenger);
 
 	finalGCStats->_backout |= scavStats->_backout;
+	omrtty_printf("mergeGCStatsBase env ID %zu  _flipBytes current %zu adding %zu _tenureAggregateBytes current %zu adding %zu\n",
+			env->getEnvironmentId(), finalGCStats->_flipBytes, scavStats->_flipBytes, finalGCStats->_tenureAggregateBytes, scavStats->_tenureAggregateBytes);
+
 	finalGCStats->_tenureAggregateCount += scavStats->_tenureAggregateCount;
 	finalGCStats->_tenureAggregateBytes += scavStats->_tenureAggregateBytes;
 #if defined(OMR_GC_LARGE_OBJECT_AREA)
@@ -883,6 +898,7 @@ void
 MM_Scavenger::mergeThreadGCStats(MM_EnvironmentBase *env)
 {
 	OMRPORT_ACCESS_FROM_OMRVM(_omrVM);
+	omrtty_printf("mergeThreadGCStats env ID %zu\n", env->getEnvironmentId());
 
 	/* Protect the merge with the mutex (this is done by multiple threads in the parallel collector) */
 	omrthread_monitor_enter(_extensions->gcStatsMutex);
@@ -929,6 +945,9 @@ MM_Scavenger::mergeThreadGCStats(MM_EnvironmentBase *env)
 void
 MM_Scavenger::mergeIncrementGCStats(MM_EnvironmentBase *env, bool lastIncrement)
 {
+	OMRPORT_ACCESS_FROM_OMRVM(_omrVM);
+	omrtty_printf("mergeIncrementGCStats env ID %zu\n", env->getEnvironmentId());
+
 	Assert_MM_true(env->isMainThread());
 	MM_ScavengerStats *finalGCStats = &_extensions->scavengerStats;
 	mergeGCStatsBase(env, finalGCStats, &_extensions->incrementScavengerStats);
@@ -1031,6 +1050,10 @@ MM_Scavenger::calcGCStats(MM_EnvironmentStandard *env)
 			scavengerGCStats->_avgTenureBytesDeviation = (uintptr_t)MM_Math::weightedAverage((float)scavengerGCStats->_avgTenureBytesDeviation,
 																				MM_Math::abs(tenureBytesDeviation),
 																				TENURE_BYTES_HISTORY_WEIGHT);
+
+			uintptr_t expectedFlipBytes = scavengerGCStats->_flipBytes + scavengerGCStats->_failedFlipBytes;
+
+			_averageExpectedFlipBytes = (uintptr_t)MM_Math::weightedAverage((float)_averageExpectedFlipBytes, (float)expectedFlipBytes, 0.5f);
 		} else {
 			scavengerGCStats->_avgInitialFree = initialFree;
 
@@ -1038,7 +1061,7 @@ MM_Scavenger::calcGCStats(MM_EnvironmentStandard *env)
 			scavengerGCStats->_avgTenureBytes = (uintptr_t)(scavengerGCStats->_flipBytes / 2);
 		}
 #if defined(OMR_GC_MODRON_CONCURRENT_MARK)
-			if (_extensions->debugConcurrentMark) {
+			//if (_extensions->debugConcurrentMark) {
 				OMRPORT_ACCESS_FROM_OMRPORT(env->getPortLibrary());
 				omrtty_printf(
 					"Tenured bytes: %zu\navgTenureBytes: %zu\ntenureBytesDeviation: %f\navgTenureBytesDeviation: %zu\ninitialFree: %zu\nsurvivorAllocated: %zu\navgInitialFree: %zu\n",
@@ -1049,7 +1072,9 @@ MM_Scavenger::calcGCStats(MM_EnvironmentStandard *env)
 					initialFree,
 					survivorAllocated,
 					scavengerGCStats->_avgInitialFree);
-			}
+			//}
+			omrtty_printf(" _averageExpectedFlipBytes %zu\n", _averageExpectedFlipBytes);
+
 #endif /* OMR_GC_MODRON_CONCURRENT_MARK */
 	}
 }
@@ -3507,7 +3532,11 @@ MM_Scavenger::releaseLocalCopyCache(MM_EnvironmentStandard *env, MM_CopyScanCach
 	return cacheToReuse;
 }
 
+<<<<<<< Upstream, based on github-omr/master
 /* Threshold is chosen to provide reasonably accurate (frequent) updates without causing contention in atomic operations. */
+=======
+/* Threshold is chosen to be provide reasonable accurate (freqeuent) updates, without causing contention in atomic operation */
+>>>>>>> 014769b cs tax
 #define INCREMENTAL_STATS_COPY_BYTES_THRESHOLD 65536
 
 bool
@@ -3535,6 +3564,7 @@ MM_Scavenger::clearCache(MM_EnvironmentStandard *env, MM_CopyScanCacheStandard *
 				env->_loaAllocation = (OMR_COPYSCAN_CACHE_TYPE_LOA == (cache->flags & OMR_COPYSCAN_CACHE_TYPE_LOA));
 			}
 
+<<<<<<< Upstream, based on github-omr/master
 #if defined(OMR_GC_CONCURRENT_SCAVENGER)
 			if (isCurrentPhaseConcurrent() && (env->_scavengerStats._tenureAggregateBytes > INCREMENTAL_STATS_COPY_BYTES_THRESHOLD)) {
 				MM_AtomicOperations::add(&_extensions->incrementScavengerStats._tenureAggregateBytes, env->_scavengerStats._tenureAggregateBytes);
@@ -3542,6 +3572,12 @@ MM_Scavenger::clearCache(MM_EnvironmentStandard *env, MM_CopyScanCacheStandard *
 			}
 #endif /* #if defined(OMR_GC_CONCURRENT_SCAVENGER) */
 
+=======
+			if (isCurrentPhaseConcurrent() && (env->_scavengerStats._tenureAggregateBytes > INCREMENTAL_STATS_COPY_BYTES_THRESHOLD)) {
+				MM_AtomicOperations::add(&_extensions->incrementScavengerStats._tenureAggregateBytes, env->_scavengerStats._tenureAggregateBytes);
+				env->_scavengerStats._tenureAggregateBytes = 0;
+			}
+>>>>>>> 014769b cs tax
 		} else if (0 != (cache->flags & OMR_COPYSCAN_CACHE_TYPE_SEMISPACE)) {
 			allocSubSpace = _survivorMemorySubSpace;
 			if (discardSize < env->getExtensions()->tlhSurvivorDiscardThreshold) {
@@ -3556,6 +3592,7 @@ MM_Scavenger::clearCache(MM_EnvironmentStandard *env, MM_CopyScanCacheStandard *
 				env->_survivorTLHRemainderTop = cache->cacheTop;
 			}
 
+<<<<<<< Upstream, based on github-omr/master
 #if defined(OMR_GC_CONCURRENT_SCAVENGER)
 			if (isCurrentPhaseConcurrent() && (env->_scavengerStats._flipBytes > INCREMENTAL_STATS_COPY_BYTES_THRESHOLD)) {
 				MM_AtomicOperations::add(&_extensions->incrementScavengerStats._flipBytes, env->_scavengerStats._flipBytes);
@@ -3563,6 +3600,12 @@ MM_Scavenger::clearCache(MM_EnvironmentStandard *env, MM_CopyScanCacheStandard *
 			}
 #endif /* #if defined(OMR_GC_CONCURRENT_SCAVENGER) */
 
+=======
+			if (isCurrentPhaseConcurrent() && (env->_scavengerStats._flipBytes > INCREMENTAL_STATS_COPY_BYTES_THRESHOLD)) {
+				MM_AtomicOperations::add(&_extensions->incrementScavengerStats._flipBytes, env->_scavengerStats._flipBytes);
+				env->_scavengerStats._flipBytes = 0;
+			}
+>>>>>>> 014769b cs tax
 		} else {
 			/*
 			 * In case if OMR_COPYSCAN_CACHE_TYPE_SPLIT_ARRAY flag is set none of
@@ -5730,6 +5773,8 @@ MM_Scavenger::workThreadProcessRoots(MM_EnvironmentStandard *env)
 void
 MM_Scavenger::workThreadScan(MM_EnvironmentStandard *env)
 {
+	OMRPORT_ACCESS_FROM_ENVIRONMENT(env);
+	omrtty_printf("workThreadScan id %zu\n", env->getWorkerID());
 	/* This is where the most of scan work should occur in CS. Typically as a concurrent task (background threads), but in some corner cases it could be scheduled as a STW task */
 	clearThreadGCStats(env, false);
 
@@ -5966,6 +6011,7 @@ void
 MM_Scavenger::payAllocationTax(MM_EnvironmentBase *env, MM_MemorySubSpace *subspace, MM_MemorySubSpace *baseSubSpace, MM_AllocateDescription *allocDescription)
 {
 	if (isCurrentPhaseConcurrent()) {
+<<<<<<< Upstream, based on github-omr/master
 		uintptr_t freeMemory = _activeSubSpace->getMemorySubSpaceAllocate()->getApproximateActiveFreeMemorySize();
 		uintptr_t totalMemory = _activeSubSpace->getMemorySubSpaceAllocate()->getActiveMemorySize();
 
@@ -5985,6 +6031,38 @@ MM_Scavenger::payAllocationTax(MM_EnvironmentBase *env, MM_MemorySubSpace *subsp
 		 */
 		if ((1.0f + flipBytesRatio) < usedMemoryRatio) {
 			/* Yet to provide a meaningful heuristic (current one should never trigger). */
+=======
+		OMRPORT_ACCESS_FROM_ENVIRONMENT(env);
+
+		uintptr_t freeMemory = _activeSubSpace->getMemorySubSpaceAllocate()->getApproximateActiveFreeMemorySize();
+		uintptr_t totalMemory = _activeSubSpace->getMemorySubSpaceAllocate()->getActiveMemorySize();
+
+		/* Progress of how much Survivor/Allocate area has been consumed since the start this cycle relative.
+		 * (Although farily small, consider excluding the amount consumed by the first STW increment.
+		 */
+		float usedMemoryRatio = 1.0f - (float)freeMemory / totalMemory;
+
+		/* Total flipped bytes, from both GC background threads and from Read Barriers, since the start of the concurrent phase of this cycle. */
+		uintptr_t flipBytes = _extensions->incrementScavengerStats._flipBytes + _extensions->incrementScavengerStats._readObjectBarrierFlipBytes;
+
+		/* Progress of how much objects have been flipped since the start of concurrent phase of this cycle relative to historically averaged amount. */
+		float flipBytesRatio = (float)flipBytes / _averageExpectedFlipBytes;
+
+		omrtty_printf("MM_Scavenger::payAllocationTax envID %zu free/total mem %zu/%zu used bytes %.3f flipped global %zu bytes %zu%% of total mem; %.3f of average expected flipped %zu\n",
+				env->getEnvironmentId(),
+				freeMemory,
+				totalMemory,
+				usedMemoryRatio,
+				flipBytes,
+				flipBytes / (totalMemory / 100),
+				flipBytesRatio,
+				_averageExpectedFlipBytes);
+
+		/* If flip progress is too low (too small Nursery, background GC threads starved by CPU overutilzation,...)
+		 * mutator threads need to be taxed to slow down their heap allocation and CPU consumption. */
+		if ((0.3f + flipBytesRatio < usedMemoryRatio)) {
+			omrtty_printf("MM_Scavenger::payAllocationTax envID %zu sleeping\n", env->getEnvironmentId());
+>>>>>>> 014769b cs tax
 			omrthread_sleep(1);
 		}
 	}

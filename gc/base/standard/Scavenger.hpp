@@ -104,6 +104,7 @@ private:
 	bool _failedTenureThresholdReached;
 	uintptr_t _failedTenureLargestObject;
 	uintptr_t _countSinceForcingGlobalGC;
+	uintptr_t _averageExpectedFlipBytes; // per cycle....
 
 	bool _expandTenureOnFailedAllocate;
 	bool _cachedSemiSpaceResizableFlag;
@@ -976,6 +977,7 @@ public:
 		, _expandFailed(false)
 		, _failedTenureThresholdReached(false)
 		, _countSinceForcingGlobalGC(0)
+		, _averageExpectedFlipBytes(0)
 		, _expandTenureOnFailedAllocate(true)
 		, _minTenureFailureSize(UDATA_MAX)
 		, _minSemiSpaceFailureSize(UDATA_MAX)
