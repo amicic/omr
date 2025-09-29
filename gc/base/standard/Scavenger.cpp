@@ -323,6 +323,10 @@ MM_Scavenger::tearDown(MM_EnvironmentBase *env)
 	/* Unregister hook for global GC end. */
 	(*mmOmrHooks)->J9HookUnregister(mmOmrHooks, J9HOOK_MM_OMR_GLOBAL_GC_START, hookGlobalCollectionStart, (void *)this);
 	(*mmOmrHooks)->J9HookUnregister(mmOmrHooks, J9HOOK_MM_OMR_GLOBAL_GC_END, hookGlobalCollectionComplete, (void *)this);
+
+	OMRPORT_ACCESS_FROM_OMRVM(_extensions->getOmrVM());
+	omrtty_printf("MM_Scavenger::tearDown\n");
+
 }
 
 #if defined(J9VM_OPT_CRIU_SUPPORT)
@@ -382,6 +386,9 @@ MM_Scavenger::collectorShutdown(MM_GCExtensionsBase* extensions)
 		 * It is sufficient to change the concurrent phase state to idle.
 		 */
 		_concurrentPhase = concurrent_phase_idle;
+
+		OMRPORT_ACCESS_FROM_OMRVM(_extensions->getOmrVM());
+		omrtty_printf("MM_Scavenger::collectorShutdown\n");
 	}
 #endif /* OMR_GC_CONCURRENT_SCAVENGER */
 }
@@ -2279,6 +2286,10 @@ MM_Scavenger::externalNotifyToYield(MM_EnvironmentBase *env)
 MMINLINE void
 MM_Scavenger::flushBuffersForGetNextScanCache(MM_EnvironmentStandard *env)
 {
+	/* Used only by GC threads. */
+//	OMRPORT_ACCESS_FROM_ENVIRONMENT(env);
+//	omrtty_printf("flushBuffersForGetNextScanCache envId %zu threadType %zu workerID %zu\n", env->getEnvironmentId(), env->getThreadType(), env->getWorkerID());
+	Assert_MM_true((MUTATOR_THREAD != env->getThreadType()) || (0 == env->getWorkerID()));
 	_delegate.flushReferenceObjects(env);
 	flushRememberedSet(env);
 	flushCopyScanCounts(env, false);
@@ -2382,7 +2393,7 @@ MM_Scavenger::getNextScanCache(MM_EnvironmentStandard *env)
 		return NULL;
 	}
 
-	/* Preference is to use survivor copy cache */
+	/* Preference is to use thread local copy caches */
 	MM_CopyScanCacheStandard *cache = getNextScanCacheFromThread(env);
 	if (NULL != cache) {
 		return cache;
@@ -3573,6 +3584,11 @@ MM_Scavenger::clearCache(MM_EnvironmentStandard *env, MM_CopyScanCacheStandard *
 				env->_survivorTLHRemainderBase = cache->cacheAlloc;
 				Assert_MM_true(NULL == env->_survivorTLHRemainderTop);
 				env->_survivorTLHRemainderTop = cache->cacheTop;
+//				OMRPORT_ACCESS_FROM_ENVIRONMENT(env);
+//				if (MUTATOR_THREAD == env->getThreadType()) {
+//					omrtty_printf("clearCache envId %zu survivorTLHRemainderBase/Top %llx/%llx\n", env->getEnvironmentId(), env->_survivorTLHRemainderBase, env->_survivorTLHRemainderTop);
+//				}
+
 			}
 
 #if defined(OMR_GC_CONCURRENT_SCAVENGER)
@@ -5646,6 +5662,11 @@ MM_Scavenger::threadReleaseCaches(MM_EnvironmentBase *currentEnvBase, MM_Environ
 		}
 
 		if (final) {
+//			OMRPORT_ACCESS_FROM_ENVIRONMENT(currentEnv);
+//			if (MUTATOR_THREAD == targetEnv->getThreadType() && ((NULL != targetEnv->_survivorTLHRemainderBase) || (NULL != targetEnv->_survivorTLHRemainderTop))) {
+//				omrtty_printf("threadReleaseCaches currentEnvId %zu about to abandonSurvivorTLHRemainder for targetEnvId %zu base/top %llx/%llx\n",
+//					currentEnv->getEnvironmentId(), targetEnv->getEnvironmentId(), targetEnv->_survivorTLHRemainderBase, targetEnv->_survivorTLHRemainderTop);
+//			}
 			/* If it's an intermediate release (mutator threads releasing VM access in a middle of CS cycle),
 			 * copy cache remainders are kept around (not abandoned yet), to be reused if the threads re-acquires VM access during the same CS cycle.
 			 * For the final release, even the remainders are abandoned.
@@ -6096,6 +6117,7 @@ MM_Scavenger::payAllocationTax(MM_EnvironmentBase *envBase, MM_MemorySubSpace *s
 					totalScanTimeUs);
 #endif /* defined(OMR_SCAVENGER_TRACE_TAX) */
 
+			// TODO introduce a gan generice flushBuffers API in ScavengerDelegate
 			_delegate.flushReferenceObjects(env);
 
 			Assert_MM_true(env->_cycleState == &_cycleState);
