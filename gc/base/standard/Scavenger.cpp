@@ -2009,6 +2009,9 @@ MM_Scavenger::updateCopyScanCounts(MM_EnvironmentBase* env, uint64_t slotsScanne
 	env->_scavengerStats._slotsCopied += slotsCopied;
 	uint64_t updateResult = _extensions->copyScanRatio.update(env, &(env->_scavengerStats._slotsScanned), &(env->_scavengerStats._slotsCopied), _waitingCount, &(env->_scavengerStats._copyScanUpdates));
 	if (0 != updateResult) {
+		//OMRPORT_ACCESS_FROM_OMRPORT(env->getPortLibrary());
+		//omrtty_printf("updateCopyScanCounts envID %zu about to do majorUpdate\n", env->getEnvironmentId());
+
 		_extensions->copyScanRatio.majorUpdate(env, updateResult, _cachedEntryCount, _scavengeCacheScanList.getApproximateEntryCount());
 	}
 }
@@ -2016,6 +2019,9 @@ MM_Scavenger::updateCopyScanCounts(MM_EnvironmentBase* env, uint64_t slotsScanne
 MMINLINE void
 MM_Scavenger::flushCopyScanCounts(MM_EnvironmentBase* env, bool majorFlush)
 {
+	//OMRPORT_ACCESS_FROM_OMRPORT(env->getPortLibrary());
+	//omrtty_printf("flushCopyScanCounts envID %zu majorFlush %zu\n", env->getEnvironmentId(), (uintptr_t)majorFlush);
+
 	uint64_t updateResult = 0;
 
 	if (env->_scavengerStats._slotsScanned != 0) {
@@ -2294,8 +2300,10 @@ MM_Scavenger::flushBuffersForGetNextScanCache(MM_EnvironmentStandard *env, bool 
 bool
 MM_Scavenger::shouldDoFinalNotify(MM_EnvironmentStandard *env)
 {
+	//OMRPORT_ACCESS_FROM_ENVIRONMENT(env);
 #if defined(OMR_GC_CONCURRENT_SCAVENGER)
 	if (_extensions->concurrentScavengeExhaustiveTermination && isCurrentPhaseConcurrent() && !_scavengeCacheFreeList.areAllCachesReturned()) {
+		//omrtty_printf("shouldDoFinalNotify envID %zu 1\n", env->getEnvironmentId());
 
 		/* GC threads ran out of work, but not all copy caches are back to the global free pool. They are kept by mutator threads.
 		 * Activate Async Signal handler which will force Mutator threads to flush their copy caches for scanning. */
@@ -2303,8 +2311,12 @@ MM_Scavenger::shouldDoFinalNotify(MM_EnvironmentStandard *env)
 
 		/* If no work has been created and no yield was requested, wait for new work. */
 		if (!checkAndSetShouldYieldFlag(env)) {
+			//omrtty_printf("shouldDoFinalNotify envID %zu 2\n", env->getEnvironmentId());
+
 			/* Meanwhile, mutator might have raced and released caches - check again. */
 			if (!_scavengeCacheFreeList.areAllCachesReturned()) {
+				//omrtty_printf("shouldDoFinalNotify envID %zu 3\n", env->getEnvironmentId());
+
 				if (0 == _cachedEntryCount)  {
 
 					/* The only known reason for timeout is a rare case if Exclusive VM Access request came from a non-GC party. Without a timeout,
@@ -2314,7 +2326,9 @@ MM_Scavenger::shouldDoFinalNotify(MM_EnvironmentStandard *env)
 					 * 1) Notify GC (via hook) that Exclusive is requested (proven to work, but breaks general async nature of Exclusive requests).
 					 * 2) Release VM access prior to blocking (tricky since the blocking thread is not necessarily the Main thread, which typically holds VM access).
 					 */
+					//omrtty_printf("shouldDoFinalNotify envID %zu about to block\n", env->getEnvironmentId());
 					omrthread_monitor_wait_timed(_scanCacheMonitor, 1, 0);
+					//omrtty_printf("shouldDoFinalNotify envID %zu unblocked\n", env->getEnvironmentId());
 				}
 				/* More work is pending, so the final notify cannot be sent yet. Help with work and eventually re-evaluate if it's really the end. */
 				return false;
@@ -2426,6 +2440,7 @@ MM_Scavenger::getNextScanCache(MM_EnvironmentStandard *env)
 				flushBuffersForGetNextScanCache(env, true);
 
 				if (shouldDoFinalNotify(env)) {
+					//flushCopyScanCounts(env, true);
 					_waitingCount = 0;
 					_doneIndex += 1;
 					uint64_t notifyStartTime = omrtime_hires_clock();
@@ -5594,6 +5609,8 @@ MM_Scavenger::threadReleaseCaches(MM_EnvironmentBase *currentEnvBase, MM_Environ
 			currentEnv = MM_EnvironmentStandard::getEnvironment(currentEnvBase);
 		}
 
+		//OMRPORT_ACCESS_FROM_ENVIRONMENT(currentEnv);
+
 		if (NULL != targetEnv->_deferredScanCache) {
 #if defined(J9MODRON_TGC_PARALLEL_STATISTICS)
 			targetEnv->_scavengerStats._releaseScanListCount += 1;
@@ -5645,6 +5662,8 @@ MM_Scavenger::threadReleaseCaches(MM_EnvironmentBase *currentEnvBase, MM_Environ
 		}
 
 		if (final) {
+			//omrtty_printf("threadReleaseCaches current/target envID %zu / %zu flushCaches %zu final %zu\n", currentEnv->getEnvironmentId(), targetEnv->getEnvironmentId(), (uintptr_t)flushCaches, (uintptr_t)final);
+
 			/* If it's an intermediate release (mutator threads releasing VM access in a middle of CS cycle),
 			 * copy cache remainders are kept around (not abandoned yet), to be reused if the threads re-acquires VM access during the same CS cycle.
 			 * For the final release, even the remainders are abandoned.

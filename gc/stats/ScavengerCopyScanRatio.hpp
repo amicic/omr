@@ -88,7 +88,7 @@ class MM_EnvironmentBase;
 
 #define SCAVENGER_COUNTER_DEFAULT_ACCUMULATOR 0
 
-#define SCAVENGER_UPDATE_HISTORY_SIZE 16
+#define SCAVENGER_UPDATE_HISTORY_SIZE 2
 
 class MM_ScavengerCopyScanRatio
 {
@@ -122,7 +122,7 @@ private:
 	uint64_t _resetTimestamp;					/**< timestamp at reset() */
 	uintptr_t _threadCount;						/**< number of gc threads participating in current gc cycle */
 	uintptr_t _historyFoldingFactor;			/** number of major updates per history record */
-	uintptr_t _historyTableIndex;				/** index of history table record that will receive next major update */
+	uintptr_t _historyTableIndex;		/** index of history table record that will receive next major update */
 	UpdateHistory _historyTable[SCAVENGER_UPDATE_HISTORY_SIZE];
 
 	/* Function members */
@@ -185,41 +185,44 @@ public:
 	 * @param waitingCount number of waiting threads at current instant
 	 * @return if non zero, it's time for major update. the returned value is to be passed to majorUpdate
 	 */
-	MMINLINE uint64_t
-	update(MM_EnvironmentBase* env, uint64_t *slotsScanned, uint64_t *slotsCopied, uint64_t waitingCount, uintptr_t *copyScanUpdates, bool flush = false)
-	{
-		if (SCAVENGER_SLOTS_SCANNED_PER_THREAD_UPDATE <= *slotsScanned || flush) {
-			uint64_t scannedCount =  *slotsScanned;
-			uint64_t copiedCount =  *slotsCopied;
-			*slotsScanned = *slotsCopied = 0;
-
-			/* this thread may have scanned a long array segment resulting in scanned/copied slot counts that must be scaled down to avoid overflow in the accumulator */
-			while ((SCAVENGER_SLOTS_SCANNED_PER_THREAD_UPDATE << 1) < scannedCount) {
-				/* scale scanned and copied counts identically */
-				scannedCount >>= 1;
-				copiedCount >>= 1;
-			}
-
-			/* add this thread's samples to the accumulating register */
-			uint64_t updateSample = sample(scannedCount, copiedCount, waitingCount);
-			uint64_t updateResult = atomicAddThreadUpdate(updateSample);
-			uintptr_t updateCount = updates(updateResult);
-			(*copyScanUpdates)++;
-
-			/* this next section includes a critical region for the thread that increments the update counter to threshold */
-			if (SCAVENGER_THREAD_UPDATES_PER_MAJOR_UPDATE == updateCount) {
-				/* make sure that every other thread knows that a specific thread is performing the major update. if
-				 * this thread gets timesliced in the section below while other free-running threads work up another major
-				 * update, that update will be discarded */
-				 
-				if  (0 == MM_AtomicOperations::lockCompareExchange(&_majorUpdateThreadEnv, 0, (uintptr_t)env)) {
-					return updateResult;
-				}
-			}
-		}
-		
-		return 0;
-	}
+	//MMINLINE
+	uint64_t
+	update(MM_EnvironmentBase* env, uint64_t *slotsScanned, uint64_t *slotsCopied, uint64_t waitingCount, uintptr_t *copyScanUpdates, bool flush = false);
+//	{
+//		if (SCAVENGER_SLOTS_SCANNED_PER_THREAD_UPDATE <= *slotsScanned || flush) {
+//			uint64_t scannedCount =  *slotsScanned;
+//			uint64_t copiedCount =  *slotsCopied;
+//			*slotsScanned = *slotsCopied = 0;
+//
+//			/* this thread may have scanned a long array segment resulting in scanned/copied slot counts that must be scaled down to avoid overflow in the accumulator */
+//			while ((SCAVENGER_SLOTS_SCANNED_PER_THREAD_UPDATE << 1) < scannedCount) {
+//				/* scale scanned and copied counts identically */
+//				scannedCount >>= 1;
+//				copiedCount >>= 1;
+//			}
+//
+//			/* add this thread's samples to the accumulating register */
+//			uint64_t updateSample = sample(scannedCount, copiedCount, waitingCount);
+//			uint64_t updateResult = atomicAddThreadUpdate(updateSample);
+//			uintptr_t updateCount = updates(updateResult);
+//			(*copyScanUpdates)++;
+//
+//			/* this next section includes a critical region for the thread that increments the update counter to threshold */
+//			if (SCAVENGER_THREAD_UPDATES_PER_MAJOR_UPDATE == updateCount) {
+//				/* make sure that every other thread knows that a specific thread is performing the major update. if
+//				 * this thread gets timesliced in the section below while other free-running threads work up another major
+//				 * update, that update will be discarded */
+//
+//				if  (0 == MM_AtomicOperations::lockCompareExchange(&_majorUpdateThreadEnv, 0, (uintptr_t)env)) {
+//					OMRPORT_ACCESS_FROM_OMRPORT(env->getPortLibrary());
+//					omrtty_printf("update envID %zu _historyTableIndex %zu _majorUpdateThreadEnvId %zu\n", env->getEnvironmentId(), _historyTableIndex, ((MM_EnvironmentBase *)_majorUpdateThreadEnv)->getEnvironmentId());
+//					return updateResult;
+//				}
+//			}
+//		}
+//
+//		return 0;
+//	}
 	
 	/**
 	 * Major update of progress stats: a snapshot returned by minor update is stored into _accumulatedSamples.
@@ -229,21 +232,25 @@ public:
 	 * @param nonEmptyScanLists number of non-empty scan queue lists
 	 * @param cachesQueued total number of items in scan queue lists
 	 */
-	MMINLINE void 
-	majorUpdate(MM_EnvironmentBase* env, uint64_t updateResult, uintptr_t nonEmptyScanLists, uintptr_t cachesQueued) {
-		if (0 == (SCAVENGER_COUNTER_OVERFLOW & updateResult)) {
-			/* no overflow so latch updateResult into _accumulatedSamples and record the update */
-			MM_AtomicOperations::setU64(&_accumulatedSamples, updateResult);
-			_scalingUpdateCount += 1;
-			_threadCount = record(env, nonEmptyScanLists, cachesQueued);
-		} else {
-			/* one or more counters overflowed so discard this update */
-			_overflowCount += 1;
-		}
-		/* Ensure updates are visible to other threads that go on to do a major update */
-		MM_AtomicOperations::storeSync();
-		_majorUpdateThreadEnv = 0;
-	}
+//	MMINLINE
+	void
+	majorUpdate(MM_EnvironmentBase* env, uint64_t updateResult, uintptr_t nonEmptyScanLists, uintptr_t cachesQueued);
+//	{
+//		if (0 == (SCAVENGER_COUNTER_OVERFLOW & updateResult)) {
+//			/* no overflow so latch updateResult into _accumulatedSamples and record the update */
+//			MM_AtomicOperations::setU64(&_accumulatedSamples, updateResult);
+//			_scalingUpdateCount += 1;
+//			OMRPORT_ACCESS_FROM_OMRPORT(env->getPortLibrary());
+//			omrtty_printf("majorUpdate envID %zu _historyTableIndex %zu\n", env->getEnvironmentId(), _historyTableIndex);
+//			_threadCount = record(env, nonEmptyScanLists, cachesQueued);
+//		} else {
+//			/* one or more counters overflowed so discard this update */
+//			_overflowCount += 1;
+//		}
+//		/* Ensure updates are visible to other threads that go on to do a major update */
+//		MM_AtomicOperations::storeSync();
+//		_majorUpdateThreadEnv = 0;
+//	}
 	/**
 	 * Flush major update which may be discarded: accumulator may not of reached threshold to perform a major update. 
 	 * Progress stats in the accumulator will be discarded if threshold is not reached and cycle completes. 
@@ -252,23 +259,27 @@ public:
 	 *
 	 * This is not thread safe and should be called at the end of scan completion routine by the last blocking thread
 	 */
-	MMINLINE void
-	flush(MM_EnvironmentBase* env, uintptr_t nonEmptyScanLists, uintptr_t cachesQueued) 
-	{
-		uint64_t updateResult = _accumulatingSamples;
-		_accumulatingSamples = 0;
-		if (0 != updateResult) {
-			if (0 == (SCAVENGER_COUNTER_OVERFLOW & updateResult)) {
-				/* no overflow so latch updateResult into _accumulatedSamples and record the update */
-				MM_AtomicOperations::setU64(&_accumulatedSamples, updateResult);
-				_scalingUpdateCount += 1;
-				_threadCount = record(env, nonEmptyScanLists, cachesQueued);
-			} else {
-				_overflowCount += 1;
-			}
-		}
-		reset(env, false);
-	}
+//	MMINLINE
+	void
+	flush(MM_EnvironmentBase* env, uintptr_t nonEmptyScanLists, uintptr_t cachesQueued);
+
+//	{
+//		uint64_t updateResult = _accumulatingSamples;
+//		_accumulatingSamples = 0;
+//		if (0 != updateResult) {
+//			if (0 == (SCAVENGER_COUNTER_OVERFLOW & updateResult)) {
+//				/* no overflow so latch updateResult into _accumulatedSamples and record the update */
+//				MM_AtomicOperations::setU64(&_accumulatedSamples, updateResult);
+//				_scalingUpdateCount += 1;
+//				OMRPORT_ACCESS_FROM_OMRPORT(env->getPortLibrary());
+//				omrtty_printf("flush envID %zu _historyTableIndex %zu\n", env->getEnvironmentId(), _historyTableIndex);
+//				_threadCount = record(env, nonEmptyScanLists, cachesQueued);
+//			} else {
+//				_overflowCount += 1;
+//			}
+//		}
+//		reset(env, false);
+//	}
 
 	/**
 	 * Reset to initial state (0 accumulated samples, unit scaling factor). This

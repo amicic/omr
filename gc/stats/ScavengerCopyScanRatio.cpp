@@ -45,12 +45,21 @@ MM_ScavengerCopyScanRatio::reset(MM_EnvironmentBase* env, bool resetHistory)
 		_majorUpdateThreadEnv = 0;
 		memset(_historyTable, 0, SCAVENGER_UPDATE_HISTORY_SIZE * sizeof(UpdateHistory));
 	}
+
+//	OMRPORT_ACCESS_FROM_OMRPORT(env->getPortLibrary());
+//	omrtty_printf("reset envID %zu _historyTableIndex %zu _majorUpdateThreadEnvId %zu\n", env->getEnvironmentId(), _historyTableIndex, (_majorUpdateThreadEnv ? ((MM_EnvironmentBase *)_majorUpdateThreadEnv)->getEnvironmentId() : 0));
+
 }
 
 uintptr_t
 MM_ScavengerCopyScanRatio::record(MM_EnvironmentBase* env, uintptr_t nonEmptyScanLists, uintptr_t cachesQueued)
 {
 	OMRPORT_ACCESS_FROM_OMRPORT(env->getPortLibrary());
+	//omrtty_printf("record 1 envID %zu _historyTableIndex %zu\n", env->getEnvironmentId(), _historyTableIndex);
+
+//	if ((SCAVENGER_UPDATE_HISTORY_SIZE == _historyTableIndex) && (0 == rand() % 10)) {
+//		omrthread_sleep(1);
+//	}
 
 	if (SCAVENGER_UPDATE_HISTORY_SIZE <= _historyTableIndex) {
 		Assert_MM_true(SCAVENGER_UPDATE_HISTORY_SIZE == _historyTableIndex);
@@ -81,6 +90,8 @@ MM_ScavengerCopyScanRatio::record(MM_EnvironmentBase* env, uintptr_t nonEmptySca
 		}
 		_historyFoldingFactor <<= 1;
 		_historyTableIndex = SCAVENGER_UPDATE_HISTORY_SIZE >> 1;
+		//omrtty_printf("record 2 envID %zu _historyTableIndex %zu\n", env->getEnvironmentId(), _historyTableIndex);
+
 		uintptr_t zeroBytes = (SCAVENGER_UPDATE_HISTORY_SIZE >> 1) * sizeof(UpdateHistory);
 		memset(&(_historyTable[_historyTableIndex]), 0, zeroBytes);
 	}
@@ -108,6 +119,13 @@ MM_ScavengerCopyScanRatio::record(MM_EnvironmentBase* env, uintptr_t nonEmptySca
 	/* advance table index if current record is maxed out */
 	if (historyRecord->updates >= (_historyFoldingFactor * SCAVENGER_THREAD_UPDATES_PER_MAJOR_UPDATE)) {
 		_historyTableIndex += 1;
+//		//uintptr_t index = _historyTableIndex;
+//		omrtty_printf("record 3 envID %zu _historyTableIndex %zu\n", env->getEnvironmentId(), _historyTableIndex);
+//		if (0 == rand() % 10) {
+//			omrthread_sleep(1);
+//			//omrtty_printf("record 4 envID %zu _historyTableIndex %zu\n", env->getEnvironmentId(), _historyTableIndex);
+//			//Assert_MM_true(index == _historyTableIndex);
+//		}
 	}
 	return threadCount;
 }
@@ -124,5 +142,92 @@ void
 MM_ScavengerCopyScanRatio::failedUpdate(MM_EnvironmentBase* env, uint64_t copied, uint64_t scanned)
 {
 	Assert_GC_true_with_message2(env, copied <= scanned, "MM_ScavengerCopyScanRatio::getScalingFactor(): copied (=%llu) exceeds scanned (=%llu) -- non-atomic 64-bit read\n", copied, scanned);
+}
+
+void
+MM_ScavengerCopyScanRatio::majorUpdate(MM_EnvironmentBase* env, uint64_t updateResult, uintptr_t nonEmptyScanLists, uintptr_t cachesQueued)
+{
+//	OMRPORT_ACCESS_FROM_OMRPORT(env->getPortLibrary());
+	if (0 == (SCAVENGER_COUNTER_OVERFLOW & updateResult)) {
+		/* no overflow so latch updateResult into _accumulatedSamples and record the update */
+		MM_AtomicOperations::setU64(&_accumulatedSamples, updateResult);
+		_scalingUpdateCount += 1;
+//		omrtty_printf("majorUpdate envID %zu _historyTableIndex %zu _majorUpdateThreadEnvId %zu\n", env->getEnvironmentId(), _historyTableIndex, (_majorUpdateThreadEnv ? ((MM_EnvironmentBase *)_majorUpdateThreadEnv)->getEnvironmentId() : 0));
+		_threadCount = record(env, nonEmptyScanLists, cachesQueued);
+	} else {
+		/* one or more counters overflowed so discard this update */
+		_overflowCount += 1;
+	}
+	/* Ensure updates are visible to other threads that go on to do a major update */
+	MM_AtomicOperations::storeSync();
+
+	_majorUpdateThreadEnv = 0;
+//	omrtty_printf("majorUpdate 2 envID %zu _historyTableIndex %zu _majorUpdateThreadEnvId %zu\n", env->getEnvironmentId(), _historyTableIndex, (_majorUpdateThreadEnv ? ((MM_EnvironmentBase *)_majorUpdateThreadEnv)->getEnvironmentId() : 0));
+}
+/**
+ * Flush major update which may be discarded: accumulator may not of reached threshold to perform a major update.
+ * Progress stats in the accumulator will be discarded if threshold is not reached and cycle completes.
+ * Cached Scan queue metrics are used for flushing, a snapshot of these metrics is taken during minor update which would
+ * of triggered a major update had it reached the threshold.
+ *
+ * This is not thread safe and should be called at the end of scan completion routine by the last blocking thread
+ */
+void
+MM_ScavengerCopyScanRatio::flush(MM_EnvironmentBase* env, uintptr_t nonEmptyScanLists, uintptr_t cachesQueued)
+{
+	uint64_t updateResult = _accumulatingSamples;
+	_accumulatingSamples = 0;
+	if (0 != updateResult) {
+		if (0 == (SCAVENGER_COUNTER_OVERFLOW & updateResult)) {
+			/* no overflow so latch updateResult into _accumulatedSamples and record the update */
+			MM_AtomicOperations::setU64(&_accumulatedSamples, updateResult);
+			_scalingUpdateCount += 1;
+//			OMRPORT_ACCESS_FROM_OMRPORT(env->getPortLibrary());
+//			omrtty_printf("flush envID %zu _historyTableIndex %zu _majorUpdateThreadEnvId %zu\n", env->getEnvironmentId(), _historyTableIndex, (_majorUpdateThreadEnv ? ((MM_EnvironmentBase *)_majorUpdateThreadEnv)->getEnvironmentId() : 0));
+			_threadCount = record(env, nonEmptyScanLists, cachesQueued);
+		} else {
+			_overflowCount += 1;
+		}
+	}
+	reset(env, false);
+}
+
+
+uint64_t
+MM_ScavengerCopyScanRatio::update(MM_EnvironmentBase* env, uint64_t *slotsScanned, uint64_t *slotsCopied, uint64_t waitingCount, uintptr_t *copyScanUpdates, bool flush)
+{
+	if (SCAVENGER_SLOTS_SCANNED_PER_THREAD_UPDATE <= *slotsScanned || flush) {
+		uint64_t scannedCount =  *slotsScanned;
+		uint64_t copiedCount =  *slotsCopied;
+		*slotsScanned = *slotsCopied = 0;
+
+		/* this thread may have scanned a long array segment resulting in scanned/copied slot counts that must be scaled down to avoid overflow in the accumulator */
+		while ((SCAVENGER_SLOTS_SCANNED_PER_THREAD_UPDATE << 1) < scannedCount) {
+			/* scale scanned and copied counts identically */
+			scannedCount >>= 1;
+			copiedCount >>= 1;
+		}
+
+		/* add this thread's samples to the accumulating register */
+		uint64_t updateSample = sample(scannedCount, copiedCount, waitingCount);
+		uint64_t updateResult = atomicAddThreadUpdate(updateSample);
+		uintptr_t updateCount = updates(updateResult);
+		(*copyScanUpdates)++;
+
+		/* this next section includes a critical region for the thread that increments the update counter to threshold */
+		if (SCAVENGER_THREAD_UPDATES_PER_MAJOR_UPDATE == updateCount) {
+			/* make sure that every other thread knows that a specific thread is performing the major update. if
+			 * this thread gets timesliced in the section below while other free-running threads work up another major
+			 * update, that update will be discarded */
+
+			if  (0 == MM_AtomicOperations::lockCompareExchange(&_majorUpdateThreadEnv, 0, (uintptr_t)env)) {
+//				OMRPORT_ACCESS_FROM_OMRPORT(env->getPortLibrary());
+//				omrtty_printf("update envID %zu _historyTableIndex %zu _majorUpdateThreadEnvId %zu\n", env->getEnvironmentId(), _historyTableIndex, ((MM_EnvironmentBase *)_majorUpdateThreadEnv)->getEnvironmentId());
+				return updateResult;
+			}
+		}
+	}
+
+	return 0;
 }
 
