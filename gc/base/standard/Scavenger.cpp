@@ -2279,6 +2279,7 @@ MM_Scavenger::externalNotifyToYield(MM_EnvironmentBase *env)
 MMINLINE void
 MM_Scavenger::flushBuffersForGetNextScanCache(MM_EnvironmentStandard *env)
 {
+	// TODO should assert this is a GC thread
 	_delegate.flushReferenceObjects(env);
 	flushRememberedSet(env);
 	flushCopyScanCounts(env, false);
@@ -2286,7 +2287,7 @@ MM_Scavenger::flushBuffersForGetNextScanCache(MM_EnvironmentStandard *env)
 #if defined(OMR_GC_CONCURRENT_SCAVENGER)
 	if (_extensions->concurrentScavengeExhaustiveTermination && isCurrentPhaseConcurrent()) {
 		/* need to return empty caches to the global pool so they can be accurately counted when evaluating 'all caches returned' termination criteria */
-		returnEmptyCopyCachesToFreeList(env);
+//		returnEmptyCopyCachesToFreeList(env);
 	}
 #endif /* #if defined(OMR_GC_CONCURRENT_SCAVENGER) */
 }
@@ -2382,7 +2383,7 @@ MM_Scavenger::getNextScanCache(MM_EnvironmentStandard *env)
 		return NULL;
 	}
 
-	/* Preference is to use survivor copy cache */
+	/* Preference is to use thread local copy caches */
 	MM_CopyScanCacheStandard *cache = getNextScanCacheFromThread(env);
 	if (NULL != cache) {
 		return cache;
@@ -6096,6 +6097,7 @@ MM_Scavenger::payAllocationTax(MM_EnvironmentBase *envBase, MM_MemorySubSpace *s
 					totalScanTimeUs);
 #endif /* defined(OMR_SCAVENGER_TRACE_TAX) */
 
+			// TODO introduce a gan generice flushBuffers API in ScavengerDelegate
 			_delegate.flushReferenceObjects(env);
 
 			Assert_MM_true(env->_cycleState == &_cycleState);
