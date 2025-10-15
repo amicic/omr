@@ -680,6 +680,7 @@ MM_ConcurrentGCIncrementalUpdate::adjustTraceTarget()
 	/* Reset bytes to trace and clean based on new heap size and the average live rate */
 	uintptr_t totalBytesToTrace = (uintptr_t)(heapSize * _tenureLiveObjectFactor * _tenureNonLeafObjectFactor);
 	_bytesToTracePass1 = (uintptr_t)((float)totalBytesToTrace * _bytesTracedInPass1Factor);
+	Assert_MM_true(totalBytesToTrace >= _bytesToTracePass1);
 	_bytesToTracePass2 = totalBytesToTrace - _bytesToTracePass1;
 	_bytesToCleanPass1 = (uintptr_t)((float)_bytesToTracePass1 * _cardCleaningFactorPass1);
 	_bytesToCleanPass2 = (uintptr_t)((float)_bytesToTracePass2 * _cardCleaningFactorPass2);
@@ -765,6 +766,7 @@ MM_ConcurrentGCIncrementalUpdate::updateTuningStatisticsInternal(MM_EnvironmentB
 			}
 
 			/* What factor of the tracing work was done beofre we started 2nd pass of card cleaning ?*/
+			Assert_MM_true(totalTracedPass1 <= totalTraced);
 			newBytesTracedInPass1Factor = ((float)totalTracedPass1) / ((float)totalTraced);
 			newCardCleaningFactorPass1 = ((float)totalCleanedPass1) / ((float)totalTraced);
 			newCardCleaningFactorPass1 = OMR_MIN(newCardCleaningFactorPass1, _maxCardCleaningFactorPass1);
