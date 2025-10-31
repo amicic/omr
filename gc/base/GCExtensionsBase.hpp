@@ -1716,7 +1716,7 @@ public:
 		, softwareRangeCheckReadBarrier(false)
 		, softwareRangeCheckReadBarrierForced(false)
 		, concurrentScavenger(false)
-		, concurrentScavengerForced(false)
+		, concurrentScavengerForced(true)
 		, concurrentScavengerHWSupport(false)
 		, concurrentScavengerBackgroundThreads(1)
 		, concurrentScavengerBackgroundThreadsForced(false)
