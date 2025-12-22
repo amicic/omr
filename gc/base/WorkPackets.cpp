@@ -160,6 +160,9 @@ MM_WorkPackets::initialize(MM_EnvironmentBase *env)
 		}
 	}
 	
+	OMRPORT_ACCESS_FROM_ENVIRONMENT(env);
+	omrtty_printf("MM_WorkPackets::initialize _activePackets %zu _maxPackets %zu\n", _activePackets, _maxPackets);
+
 	return true;
 }
 
@@ -235,6 +238,10 @@ MM_WorkPackets::initWorkPacketsBlock(MM_EnvironmentBase *env)
 
 	_packetsBlocksTop++;
 	_activePackets += _packetsPerBlock;
+
+	OMRPORT_ACCESS_FROM_ENVIRONMENT(env);
+	omrtty_printf("MM_WorkPackets::initWorkPacketsBlock _activePackets %zu _maxPackets %zu\n", _activePackets, _maxPackets);
+
 
 	return true;
 }
