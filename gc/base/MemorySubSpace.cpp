@@ -1213,6 +1213,9 @@ MM_MemorySubSpace::maxExpansion(MM_EnvironmentBase* env)
 uintptr_t
 MM_MemorySubSpace::maxExpansionInSpace(MM_EnvironmentBase* env)
 {
+	OMRPORT_ACCESS_FROM_ENVIRONMENT(env);
+	omrtty_printf("MemorySubSpace::maxExpansionInSpace  %s _maximumSize %zu _currentSize %zu\n", getName(), _maximumSize, _currentSize);
+
 	uintptr_t max = _maximumSize - _currentSize;
 
 	/* Is memory space aready at maximum size then we cant expand anymore */

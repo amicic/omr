@@ -105,6 +105,8 @@ public:
 
 	virtual uintptr_t counterBalanceContract(MM_EnvironmentBase *env, MM_MemorySubSpace *previousSubSpace, MM_MemorySubSpace *contractSubSpace, uintptr_t contractSize, uintptr_t contractAlignment);
 
+	virtual uintptr_t maxExpansionInSpace(MM_EnvironmentBase *env);
+
 	virtual uintptr_t releaseFreeMemoryPages(MM_EnvironmentBase* env, uintptr_t memoryType);
 
 	virtual MMINLINE uintptr_t getContractionSize() const { return _memorySubSpaceOld->getContractionSize(); }

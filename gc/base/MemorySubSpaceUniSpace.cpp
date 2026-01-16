@@ -251,6 +251,9 @@ MM_MemorySubSpaceUniSpace::timeForHeapContract(MM_EnvironmentBase *env, MM_Alloc
 {
 	Trc_MM_MemorySubSpaceUniSpace_timeForHeapContract_Entry(env->getLanguageVMThread(), systemGC ? "true" : "false");
 
+	OMRPORT_ACCESS_FROM_ENVIRONMENT(env);
+	omrtty_printf("MM_MemorySubSpaceUniSpace::timeForHeapContract canExpand %zu  maxContraction %zu\n", (uintptr_t)_physicalSubArena->canExpand(env), maxContraction(env));
+
 	/* If PSA or memory sub space cant be shrunk dont bother trying */
 	if ( (NULL == _physicalSubArena) || !_physicalSubArena->canContract(env) || (maxContraction(env) == 0)) {
 		Trc_MM_MemorySubSpaceUniSpace_timeForHeapContract_Exit1(env->getLanguageVMThread());

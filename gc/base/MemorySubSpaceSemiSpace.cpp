@@ -937,6 +937,12 @@ MM_MemorySubSpaceSemiSpace::checkSubSpaceMemoryPostCollectResize(MM_EnvironmentB
 				omrtty_printf("%lf (weight %lf)\n", _averageScavengeTimeRatio, weight);
 			}
 
+
+
+			if (debug) {
+				omrtty_printf("\tcanExpand %zu  maxExpansionInSpace %zu\n", (uintptr_t)_physicalSubArena->canExpand(env), maxExpansionInSpace(env));
+			}
+
 			/* If the average scavenge to interval ratio is greater than the maximum, try to expand */
 			if((_averageScavengeTimeRatio > extensions->dnssExpectedRatioMaximum._valueSpecified)
 					&& (NULL != _physicalSubArena) && _physicalSubArena->canExpand(env) && (maxExpansionInSpace(env) != 0)) {

@@ -323,6 +323,15 @@ MM_MemorySubSpaceGenerational::counterBalanceContract(
 }
 
 uintptr_t
+MM_MemorySubSpaceGenerational::maxExpansionInSpace(MM_EnvironmentBase *env) {
+	OMRPORT_ACCESS_FROM_ENVIRONMENT(env);
+	omrtty_printf("MM_MemorySubSpaceGenerational::maxExpansionInSpace getMemorySubSpaceOld()->getAvailableContractionSize %zu\n", getMemorySubSpaceOld()->getAvailableContractionSize(env, NULL));
+
+	return MM_MemorySubSpace::maxExpansionInSpace(env);
+}
+
+
+uintptr_t
 MM_MemorySubSpaceGenerational::releaseFreeMemoryPages(MM_EnvironmentBase* env, uintptr_t memoryType)
 {
 	Assert_MM_true(OMR_ARE_ALL_BITS_SET(memoryType, MEMORY_TYPE_OLD));
