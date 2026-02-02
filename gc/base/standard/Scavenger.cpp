@@ -4487,7 +4487,7 @@ MM_Scavenger::processLargeAllocateStatsAfterGC(MM_EnvironmentBase *env)
 	MM_LargeObjectAllocateStats *stats = memoryPool->getLargeObjectAllocateStats();
 	stats->setTimeMergeAverage(omrtime_hires_clock() - startTime);
 
-	stats->verifyFreeEntryCount(memoryPool->getActualFreeEntryCount());
+	stats->verifyFreeEntryCount(env, memoryPool->getActualFreeEntryCount());
 	/* estimate Fragmentation */
 	if ((GLOBALGC_ESTIMATE_FRAGMENTATION == (_extensions->estimateFragmentation & GLOBALGC_ESTIMATE_FRAGMENTATION))
 		&& _extensions->configuration->canCollectFragmentationStats(env)
