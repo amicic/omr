@@ -1032,7 +1032,9 @@ MM_ParallelGlobalGC::mainThreadCompact(MM_EnvironmentBase *env, MM_AllocateDescr
 
 	reportCompactStart(env);
 	compactStats->_startTime = omrtime_hires_clock();
-	MM_ParallelCompactTask compactTask(env, _dispatcher, _compactScheme, rebuildMarkBits, env->_cycleState->_gcCode.shouldAggressivelyCompact());
+	bool nurseryOnly = (CompactReason::COMPACT_ABORTED_SCAVENGE == compactStats->_compactReason);
+
+	MM_ParallelCompactTask compactTask(env, _dispatcher, _compactScheme, rebuildMarkBits, env->_cycleState->_gcCode.shouldAggressivelyCompact(), nurseryOnly);
 	_dispatcher->run(env, &compactTask);
 	compactStats->_endTime = omrtime_hires_clock();
 	reportCompactEnd(env);
