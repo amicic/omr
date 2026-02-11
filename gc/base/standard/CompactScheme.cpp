@@ -542,6 +542,7 @@ MM_CompactScheme::completeSubAreaTable(MM_EnvironmentStandard *env)
 void
 MM_CompactScheme::compact(MM_EnvironmentBase *envBase, bool rebuildMarkBits, bool aggressive)
 {
+	// DEV: this is the top level method
 	MM_EnvironmentStandard *env = MM_EnvironmentStandard::getEnvironment(envBase);
 	OMRPORT_ACCESS_FROM_ENVIRONMENT(env);
 	uintptr_t objectCount = 0;
@@ -585,6 +586,7 @@ MM_CompactScheme::compact(MM_EnvironmentBase *envBase, bool rebuildMarkBits, boo
 	 */
 	if (!singleThreaded || env->_currentTask->synchronizeGCThreadsAndReleaseMain(env, UNIQUE_ID)) {
 		env->_compactStats._moveStartTime = omrtime_hires_clock();
+		// DEV: step 1
 		moveObjects(env, objectCount, byteCount, skippedObjectCount);
 		env->_compactStats._moveEndTime = omrtime_hires_clock();
 
@@ -595,6 +597,7 @@ MM_CompactScheme::compact(MM_EnvironmentBase *envBase, bool rebuildMarkBits, boo
 
 		env->_compactStats._fixupStartTime = omrtime_hires_clock();
 
+		// DEV: step 2
 		fixupObjects(env, fixupObjectsCount);
 
 
@@ -607,6 +610,7 @@ MM_CompactScheme::compact(MM_EnvironmentBase *envBase, bool rebuildMarkBits, boo
 
 	/* FixupRoots can always be done in parallel */
 	env->_compactStats._rootFixupStartTime = omrtime_hires_clock();
+	// DEV: step 3
 	_delegate.fixupRoots(env, this);
 	env->_compactStats._rootFixupEndTime = omrtime_hires_clock();
 
@@ -828,6 +832,7 @@ MM_CompactScheme::moveObjects(MM_EnvironmentStandard *env, uintptr_t &objectCoun
 			continue;
 		}
 		intptr_t i;
+		// DEV: each thread tries to get a sub area to work with
 		for (i = 0; subAreaTable[i].state != SubAreaEntry::end_segment; i++) {
 			if (changeSubAreaAction(env, &subAreaTable[i], SubAreaEntry::evacuating)) {
 				evacuateSubArea(env, region, subAreaTable, i, objectCount, byteCount, skippedObjectCount);
@@ -1523,6 +1528,18 @@ MM_CompactScheme::changeSubAreaAction(MM_EnvironmentBase *env, SubAreaEntry * en
 		uintptr_t action = MM_AtomicOperations::lockCompareExchange(&entry->currentAction, previousAction, newAction);
 		if (action == previousAction) {
 			successful = true;
+			// TODO: place printf here
+			/*
+				Values for currentAction
+				0: none
+				1: setting_real_limits,
+				2: evacuating,
+				3: fixing_up,
+				4: rebuilding_mark_bits,
+				5: fixing_heap_for_walk
+			*/
+			OMRPORT_ACCESS_FROM_OMRPORT(env->getPortLibrary());
+			omrtty_printf("### SHADMAN ### changeSubAreaAction: workerId=%zu entry=%p prevAction=%zu newAction=%zu", env->getWorkerID(), entry, previousAction, newAction);
 		} else {
 			/* during this phase it's only legitimate to change to newAction so if currentAction changed underneath us that had better be its new value */
 			Assert_MM_true(action == newAction);
