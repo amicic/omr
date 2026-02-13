@@ -419,6 +419,7 @@ MM_CompactScheme::createSubAreaTable(MM_EnvironmentStandard *env, bool singleThr
 	if (env->_currentTask->synchronizeGCThreadsAndReleaseMain(env, UNIQUE_ID)) {
 		GC_HeapRegionIteratorStandard regionIterator(_rootManager);
 		uintptr_t i = 0;
+		OMRPORT_ACCESS_FROM_OMRPORT(env->getPortLibrary());
 		while(NULL != (region = regionIterator.nextRegion())) {
 			if (!region->isCommitted() || (0 == region->getSize())) {
 				continue;
@@ -428,6 +429,16 @@ MM_CompactScheme::createSubAreaTable(MM_EnvironmentStandard *env, bool singleThr
 			uintptr_t areaSize = region->getSize();
 			MM_MemorySubSpace *memorySubSpace = region->getSubSpace();
 			intptr_t state = SubAreaEntry::init;
+
+			// TODO: for tenure region, set state to fixup_only to skip moving objects
+			/*
+			if(MEMORY_TYPE_OLD == memorySubSpace->getTypeFlags())
+			{
+				state = SubAreaEntry::fixup_only;
+			}
+			*/
+			//OMRPORT_ACCESS_FROM_OMRPORT(env->getPortLibrary());
+			//omrtty_printf("SHADMAN changeSubAreaAction: workerId=%02zu | entry=%p | prevAction=%zu | newAction=%zu\n", env->getWorkerID(), entry, previousAction, newAction);
 
 			if (singleThreaded) {
 				size = areaSize;
@@ -444,14 +455,18 @@ MM_CompactScheme::createSubAreaTable(MM_EnvironmentStandard *env, bool singleThr
 				_subAreaTable[i].memoryPool = memorySubSpace->getMemoryPool(p);
 				_subAreaTable[i].state = state;
 				_subAreaTable[i++].currentAction = SubAreaEntry::none;
+				// TODO: put print statements here
+				omrtty_printf("SHADMAN createSubAreaTable: i=%zu | firstObject=%p | state=%zu \n", i-1, _subAreaTable[i-1].firstObject, _subAreaTable[i-1].state);
 			}
 			_subAreaTable[i].freeChunk = (omrobjectptr_t)highAddress;
 			_subAreaTable[i].memoryPool = NULL;
 			_subAreaTable[i].firstObject = (omrobjectptr_t)highAddress;
 			_subAreaTable[i].state = SubAreaEntry::end_segment;
 			_subAreaTable[i++].currentAction = SubAreaEntry::none;
+			omrtty_printf("SHADMAN createSubAreaTable: i=%zu | firstObject=%p | state=%zu \n", i-1, _subAreaTable[i-1].firstObject, _subAreaTable[i-1].state);
 		}
 		_subAreaTable[i].state = SubAreaEntry::end_heap;
+		omrtty_printf("SHADMAN createSubAreaTable: i=%zu | firstObject=%p | state=%zu \n", i, _subAreaTable[i].firstObject, _subAreaTable[i].state);
 
 		env->_currentTask->releaseSynchronizedGCThreads(env);
 	}
@@ -1538,8 +1553,8 @@ MM_CompactScheme::changeSubAreaAction(MM_EnvironmentBase *env, SubAreaEntry * en
 				4: rebuilding_mark_bits,
 				5: fixing_heap_for_walk
 			*/
-			OMRPORT_ACCESS_FROM_OMRPORT(env->getPortLibrary());
-			omrtty_printf("### SHADMAN ### changeSubAreaAction: workerId=%zu entry=%p prevAction=%zu newAction=%zu", env->getWorkerID(), entry, previousAction, newAction);
+			//OMRPORT_ACCESS_FROM_OMRPORT(env->getPortLibrary());
+			//omrtty_printf("SHADMAN changeSubAreaAction: workerId=%02zu | entry=%p | prevAction=%zu | newAction=%zu\n", env->getWorkerID(), entry, previousAction, newAction);
 		} else {
 			/* during this phase it's only legitimate to change to newAction so if currentAction changed underneath us that had better be its new value */
 			Assert_MM_true(action == newAction);
