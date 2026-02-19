@@ -428,17 +428,23 @@ MM_CompactScheme::createSubAreaTable(MM_EnvironmentStandard *env, bool singleThr
 			void *highAddress = region->getHighAddress();
 			uintptr_t areaSize = region->getSize();
 			MM_MemorySubSpace *memorySubSpace = region->getSubSpace();
-			intptr_t state = SubAreaEntry::init;
-
 			// TODO: for tenure region, set state to fixup_only to skip moving objects
-			/*
+			intptr_t state = SubAreaEntry::init;
 			if(MEMORY_TYPE_OLD == memorySubSpace->getTypeFlags())
 			{
 				state = SubAreaEntry::fixup_only;
 			}
-			*/
-			//OMRPORT_ACCESS_FROM_OMRPORT(env->getPortLibrary());
-			//omrtty_printf("SHADMAN changeSubAreaAction: workerId=%02zu | entry=%p | prevAction=%zu | newAction=%zu\n", env->getWorkerID(), entry, previousAction, newAction);
+
+			/*
+			states
+			0: init = 0,
+			1: busy,
+			2: ready,
+			3: full,
+			4: fixup_only,
+			5: end_segment,
+			6: end_heap
+		*/
 
 			if (singleThreaded) {
 				size = areaSize;
@@ -456,17 +462,18 @@ MM_CompactScheme::createSubAreaTable(MM_EnvironmentStandard *env, bool singleThr
 				_subAreaTable[i].state = state;
 				_subAreaTable[i++].currentAction = SubAreaEntry::none;
 				// TODO: put print statements here
-				omrtty_printf("SHADMAN createSubAreaTable: i=%zu | firstObject=%p | state=%zu \n", i-1, _subAreaTable[i-1].firstObject, _subAreaTable[i-1].state);
+				omrtty_printf("SHADMAN createSubAreaTable: i=%zu | entry=%p | memoryType=%zu | firstObject=%p | freeChunk=%p | state=%zu \n", i-1, &_subAreaTable[i-1], memorySubSpace->getTypeFlags(), _subAreaTable[i-1].firstObject, _subAreaTable[i-1].freeChunk, _subAreaTable[i-1].state);
 			}
 			_subAreaTable[i].freeChunk = (omrobjectptr_t)highAddress;
 			_subAreaTable[i].memoryPool = NULL;
 			_subAreaTable[i].firstObject = (omrobjectptr_t)highAddress;
 			_subAreaTable[i].state = SubAreaEntry::end_segment;
 			_subAreaTable[i++].currentAction = SubAreaEntry::none;
-			omrtty_printf("SHADMAN createSubAreaTable: i=%zu | firstObject=%p | state=%zu \n", i-1, _subAreaTable[i-1].firstObject, _subAreaTable[i-1].state);
+			omrtty_printf("SHADMAN createSubAreaTable: i=%zu | entry=%p | memoryType=%zu | firstObject=%p | freeChunk=%p | state=%zu \n", i-1 ,&_subAreaTable[i-1], memorySubSpace->getTypeFlags(), _subAreaTable[i-1].firstObject, _subAreaTable[i-1].freeChunk, _subAreaTable[i-1].state);
 		}
 		_subAreaTable[i].state = SubAreaEntry::end_heap;
-		omrtty_printf("SHADMAN createSubAreaTable: i=%zu | firstObject=%p | state=%zu \n", i, _subAreaTable[i].firstObject, _subAreaTable[i].state);
+		omrtty_printf("SHADMAN createSubAreaTable: i=%zu | entry=%p | firstObject=%p |  freeChunk=%p | state=%zu \n", i ,&_subAreaTable[i], _subAreaTable[i].firstObject, _subAreaTable[i].freeChunk, _subAreaTable[i].state);
+
 
 		env->_currentTask->releaseSynchronizedGCThreads(env);
 	}
@@ -496,6 +503,10 @@ MM_CompactScheme::setRealLimitsSubAreas(MM_EnvironmentStandard *env)
 
 			_subAreaTable[i].firstObject = objectPtr;
 			Assert_MM_true(objectPtr == 0 || _markMap->isBitSet(objectPtr));
+
+			// TODO: printf here
+			OMRPORT_ACCESS_FROM_OMRPORT(env->getPortLibrary());
+			omrtty_printf("SHADMAN setRealLimitsSubAreas: i=%zu | workerId=%02zu | entry=%p | firstObject=%p | state=%zu \n", i, env->getWorkerID(), &_subAreaTable[i], _subAreaTable[i].firstObject, _subAreaTable[i].state);
 		}
 	}
 }
@@ -510,6 +521,11 @@ MM_CompactScheme::removeNullSubAreas(MM_EnvironmentStandard *env)
 	if (env->_currentTask->synchronizeGCThreadsAndReleaseMain(env, UNIQUE_ID)) {
 		_compactFrom = (omrobjectptr_t)_heap->getHeapTop();
 		_compactTo   = (omrobjectptr_t)_heap->getHeapBase();
+		//TODO: printf here
+		OMRPORT_ACCESS_FROM_OMRPORT(env->getPortLibrary());
+		omrtty_printf("SHADMAN removeNullSubAreas: compactFrom=%p | compactTo=%p\n", _compactFrom, _compactTo);
+
+
 		uintptr_t j = 0;
 		for (uintptr_t i = 0; _subAreaTable[i].state != SubAreaEntry::end_heap; i++) {
 			if (NULL != _subAreaTable[i].firstObject) {
@@ -521,6 +537,7 @@ MM_CompactScheme::removeNullSubAreas(MM_EnvironmentStandard *env)
 					_compactTo = (_compactTo > _subAreaTable[j].firstObject) ? _compactTo : _subAreaTable[j].firstObject;
 				}
 				_subAreaTable[j].freeChunk = 0;
+				omrtty_printf("SHADMAN removeNullSubAreas: j=%2zu | compactFrom=%p | compactTo=%p\n", j, _compactFrom, _compactTo);
 				j++;
 			}
 		}
@@ -1543,7 +1560,6 @@ MM_CompactScheme::changeSubAreaAction(MM_EnvironmentBase *env, SubAreaEntry * en
 		uintptr_t action = MM_AtomicOperations::lockCompareExchange(&entry->currentAction, previousAction, newAction);
 		if (action == previousAction) {
 			successful = true;
-			// TODO: place printf here
 			/*
 				Values for currentAction
 				0: none
@@ -1553,8 +1569,9 @@ MM_CompactScheme::changeSubAreaAction(MM_EnvironmentBase *env, SubAreaEntry * en
 				4: rebuilding_mark_bits,
 				5: fixing_heap_for_walk
 			*/
-			//OMRPORT_ACCESS_FROM_OMRPORT(env->getPortLibrary());
-			//omrtty_printf("SHADMAN changeSubAreaAction: workerId=%02zu | entry=%p | prevAction=%zu | newAction=%zu\n", env->getWorkerID(), entry, previousAction, newAction);
+			// TODO: place printf here
+			OMRPORT_ACCESS_FROM_OMRPORT(env->getPortLibrary());
+			omrtty_printf("SHADMAN changeSubAreaAction: workerId=%02zu | entry=%p | prevAction=%zu | newAction=%zu\n", env->getWorkerID(), entry, previousAction, newAction);
 		} else {
 			/* during this phase it's only legitimate to change to newAction so if currentAction changed underneath us that had better be its new value */
 			Assert_MM_true(action == newAction);
