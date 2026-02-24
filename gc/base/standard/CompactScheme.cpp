@@ -571,8 +571,11 @@ MM_CompactScheme::completeSubAreaTable(MM_EnvironmentStandard *env)
 	}
 }
 
+// TODO: add a parameter bool nurseryOnly it will trigger changes:
+// upwards (Compact Parallel Task, Parallel Global GC), where we have to pass  true only when doing compact for abort reason
+// downwards to where we set fixup_only
 void
-MM_CompactScheme::compact(MM_EnvironmentBase *envBase, bool rebuildMarkBits, bool aggressive)
+MM_CompactScheme::compact(MM_EnvironmentBase *envBase, bool rebuildMarkBits, bool aggressive, bool nurseryOnly)
 {
 	// DEV: this is the top level method
 	MM_EnvironmentStandard *env = MM_EnvironmentStandard::getEnvironment(envBase);

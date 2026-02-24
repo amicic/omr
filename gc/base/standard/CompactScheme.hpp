@@ -309,7 +309,7 @@ public:
 
 	void workerSetupForGC(MM_EnvironmentStandard *env, bool singleThreaded);
 	void mainSetupForGC(MM_EnvironmentStandard *env);
-	virtual void compact(MM_EnvironmentBase *env, bool rebuildMarkBits, bool aggressive);
+	virtual void compact(MM_EnvironmentBase *env, bool rebuildMarkBits, bool aggressive, bool nurseryOnly);
 	omrobjectptr_t getForwardingPtr(omrobjectptr_t objectPtr) const;
 	void flushPool(MM_EnvironmentStandard *env, MM_CompactMemoryPoolState *freeListState);
 	void fixHeapForWalk(MM_EnvironmentBase *env, uintptr_t walkFlags, uintptr_t walkReason);
