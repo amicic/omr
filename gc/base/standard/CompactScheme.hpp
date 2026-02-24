@@ -160,7 +160,7 @@ protected:
 	virtual bool initialize(MM_EnvironmentBase *env);
 	virtual void tearDown(MM_EnvironmentBase *env);
 
-	void createSubAreaTable(MM_EnvironmentStandard *env, bool singleThreaded);
+	void createSubAreaTable(MM_EnvironmentStandard *env, bool singleThreaded, bool nurseryOnly);
 	/**
 	 * Set the real limits for a specific subArea
 	 *
@@ -307,7 +307,7 @@ public:
 	
 	void kill(MM_EnvironmentBase *env);
 
-	void workerSetupForGC(MM_EnvironmentStandard *env, bool singleThreaded);
+	void workerSetupForGC(MM_EnvironmentStandard *env, bool singleThreaded, bool nurseryOnly);
 	void mainSetupForGC(MM_EnvironmentStandard *env);
 	virtual void compact(MM_EnvironmentBase *env, bool rebuildMarkBits, bool aggressive, bool nurseryOnly);
 	omrobjectptr_t getForwardingPtr(omrobjectptr_t objectPtr) const;

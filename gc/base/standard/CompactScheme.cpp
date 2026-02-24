@@ -352,9 +352,9 @@ MM_CompactScheme::postObjectMove(MM_EnvironmentBase *env, omrobjectptr_t objectP
 }
 
 void
-MM_CompactScheme::workerSetupForGC(MM_EnvironmentStandard *env, bool singleThreaded)
+MM_CompactScheme::workerSetupForGC(MM_EnvironmentStandard *env, bool singleThreaded, bool nurseryOnly)
 {
-	createSubAreaTable(env, singleThreaded);
+	createSubAreaTable(env, singleThreaded, nurseryOnly);
 	setRealLimitsSubAreas(env);
 	removeNullSubAreas(env);
 	completeSubAreaTable(env);
@@ -385,7 +385,7 @@ MM_CompactScheme::freeChunkEnd(omrobjectptr_t chunk)
  *  Create sub areas table for regions.
  */
 void
-MM_CompactScheme::createSubAreaTable(MM_EnvironmentStandard *env, bool singleThreaded)
+MM_CompactScheme::createSubAreaTable(MM_EnvironmentStandard *env, bool singleThreaded, bool nurseryOnly)
 {
 	/* finding whether there are memory limitations */
 	uintptr_t max_subarea_num = _subAreaTableSize / sizeof(_subAreaTable[0]);
@@ -430,7 +430,7 @@ MM_CompactScheme::createSubAreaTable(MM_EnvironmentStandard *env, bool singleThr
 			MM_MemorySubSpace *memorySubSpace = region->getSubSpace();
 			// TODO: for tenure region, set state to fixup_only to skip moving objects
 			intptr_t state = SubAreaEntry::init;
-			if(MEMORY_TYPE_OLD == memorySubSpace->getTypeFlags())
+			if(nurseryOnly && MEMORY_TYPE_OLD == memorySubSpace->getTypeFlags())
 			{
 				state = SubAreaEntry::fixup_only;
 			}
@@ -613,7 +613,7 @@ MM_CompactScheme::compact(MM_EnvironmentBase *envBase, bool rebuildMarkBits, boo
 	}
 
 	env->_compactStats._setupStartTime = omrtime_hires_clock();
-	workerSetupForGC(env, singleThreaded);
+	workerSetupForGC(env, singleThreaded, nurseryOnly);
 	env->_compactStats._setupEndTime = omrtime_hires_clock();
 
 	/* If a single threaded compaction force compact to run on main thread. Required
@@ -917,6 +917,7 @@ MM_CompactScheme::evacuateSubArea(MM_EnvironmentStandard *env, MM_HeapRegionDesc
 {
 	uintptr_t minFreeChunk = _extensions->tlhMinimumSize;
 
+	// DEV: this skips moving if state is fixup_only. Lets add a print check here
 	if (subAreaTableEvacuate[i].state != SubAreaEntry::init) {
 		Assert_MM_true(subAreaTableEvacuate[i].state == SubAreaEntry::fixup_only);
 		return;
