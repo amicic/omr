@@ -921,8 +921,10 @@ MM_CompactScheme::evacuateSubArea(MM_EnvironmentStandard *env, MM_HeapRegionDesc
 	uintptr_t minFreeChunk = _extensions->tlhMinimumSize;
 
 	// DEV: this skips moving if state is fixup_only. Lets add a print check here
+	OMRPORT_ACCESS_FROM_OMRPORT(env->getPortLibrary());
 	if (subAreaTableEvacuate[i].state != SubAreaEntry::init) {
 		Assert_MM_true(subAreaTableEvacuate[i].state == SubAreaEntry::fixup_only);
+		omrtty_printf("SHADMAN evacuateSubArea Skipping evacuate for subarea entry %p \n", &subAreaTableEvacuate[i]);
 		return;
 	}
 	uintptr_t nobjects = 0;
