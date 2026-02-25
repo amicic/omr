@@ -430,8 +430,11 @@ MM_CompactScheme::createSubAreaTable(MM_EnvironmentStandard *env, bool singleThr
 			MM_MemorySubSpace *memorySubSpace = region->getSubSpace();
 			// TODO: for tenure region, set state to fixup_only to skip moving objects
 			intptr_t state = SubAreaEntry::init;
+			omrtty_printf("SHADMAN Checking for tenure region...\n");
+			//nurseryOnly = false;
 			if(nurseryOnly && MEMORY_TYPE_OLD == memorySubSpace->getTypeFlags())
 			{
+				omrtty_printf("SHADMAN Found tenure region!\n");
 				state = SubAreaEntry::fixup_only;
 			}
 
