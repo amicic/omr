@@ -428,26 +428,14 @@ MM_CompactScheme::createSubAreaTable(MM_EnvironmentStandard *env, bool singleThr
 			void *highAddress = region->getHighAddress();
 			uintptr_t areaSize = region->getSize();
 			MM_MemorySubSpace *memorySubSpace = region->getSubSpace();
-			// TODO: for tenure region, set state to fixup_only to skip moving objects
 			intptr_t state = SubAreaEntry::init;
+			// DEV: if nurseryOnly, check for tenure region and set state to fixup_only to skip moving objects
 			omrtty_printf("SHADMAN Checking for tenure region...\n");
-			//nurseryOnly = false;
 			if(nurseryOnly && MEMORY_TYPE_OLD == memorySubSpace->getTypeFlags())
 			{
 				omrtty_printf("SHADMAN Found tenure region!\n");
 				state = SubAreaEntry::fixup_only;
 			}
-
-			/*
-			states
-			0: init = 0,
-			1: busy,
-			2: ready,
-			3: full,
-			4: fixup_only,
-			5: end_segment,
-			6: end_heap
-		*/
 
 			if (singleThreaded) {
 				size = areaSize;
@@ -464,7 +452,6 @@ MM_CompactScheme::createSubAreaTable(MM_EnvironmentStandard *env, bool singleThr
 				_subAreaTable[i].memoryPool = memorySubSpace->getMemoryPool(p);
 				_subAreaTable[i].state = state;
 				_subAreaTable[i++].currentAction = SubAreaEntry::none;
-				// TODO: put print statements here
 				omrtty_printf("SHADMAN createSubAreaTable: i=%zu | entry=%p | memoryType=%zu | firstObject=%p | freeChunk=%p | state=%zu \n", i-1, &_subAreaTable[i-1], memorySubSpace->getTypeFlags(), _subAreaTable[i-1].firstObject, _subAreaTable[i-1].freeChunk, _subAreaTable[i-1].state);
 			}
 			_subAreaTable[i].freeChunk = (omrobjectptr_t)highAddress;
@@ -507,7 +494,6 @@ MM_CompactScheme::setRealLimitsSubAreas(MM_EnvironmentStandard *env)
 			_subAreaTable[i].firstObject = objectPtr;
 			Assert_MM_true(objectPtr == 0 || _markMap->isBitSet(objectPtr));
 
-			// TODO: printf here
 			OMRPORT_ACCESS_FROM_OMRPORT(env->getPortLibrary());
 			omrtty_printf("SHADMAN setRealLimitsSubAreas: i=%zu | workerId=%02zu | entry=%p | firstObject=%p | state=%zu \n", i, env->getWorkerID(), &_subAreaTable[i], _subAreaTable[i].firstObject, _subAreaTable[i].state);
 		}
@@ -524,10 +510,9 @@ MM_CompactScheme::removeNullSubAreas(MM_EnvironmentStandard *env)
 	if (env->_currentTask->synchronizeGCThreadsAndReleaseMain(env, UNIQUE_ID)) {
 		_compactFrom = (omrobjectptr_t)_heap->getHeapTop();
 		_compactTo   = (omrobjectptr_t)_heap->getHeapBase();
-		//TODO: printf here
+
 		OMRPORT_ACCESS_FROM_OMRPORT(env->getPortLibrary());
 		omrtty_printf("SHADMAN removeNullSubAreas: compactFrom=%p | compactTo=%p\n", _compactFrom, _compactTo);
-
 
 		uintptr_t j = 0;
 		for (uintptr_t i = 0; _subAreaTable[i].state != SubAreaEntry::end_heap; i++) {
@@ -574,13 +559,12 @@ MM_CompactScheme::completeSubAreaTable(MM_EnvironmentStandard *env)
 	}
 }
 
-// TODO: add a parameter bool nurseryOnly it will trigger changes:
+// DEV: bool nurseryOnly controls whether move step of compact will be skipped for tenure in aborted scavenge
 // upwards (Compact Parallel Task, Parallel Global GC), where we have to pass  true only when doing compact for abort reason
 // downwards to where we set fixup_only
 void
 MM_CompactScheme::compact(MM_EnvironmentBase *envBase, bool rebuildMarkBits, bool aggressive, bool nurseryOnly)
 {
-	// DEV: this is the top level method
 	MM_EnvironmentStandard *env = MM_EnvironmentStandard::getEnvironment(envBase);
 	OMRPORT_ACCESS_FROM_ENVIRONMENT(env);
 	uintptr_t objectCount = 0;
@@ -624,7 +608,6 @@ MM_CompactScheme::compact(MM_EnvironmentBase *envBase, bool rebuildMarkBits, boo
 	 */
 	if (!singleThreaded || env->_currentTask->synchronizeGCThreadsAndReleaseMain(env, UNIQUE_ID)) {
 		env->_compactStats._moveStartTime = omrtime_hires_clock();
-		// DEV: step 1
 		moveObjects(env, objectCount, byteCount, skippedObjectCount);
 		env->_compactStats._moveEndTime = omrtime_hires_clock();
 
@@ -635,7 +618,6 @@ MM_CompactScheme::compact(MM_EnvironmentBase *envBase, bool rebuildMarkBits, boo
 
 		env->_compactStats._fixupStartTime = omrtime_hires_clock();
 
-		// DEV: step 2
 		fixupObjects(env, fixupObjectsCount);
 
 
@@ -648,7 +630,6 @@ MM_CompactScheme::compact(MM_EnvironmentBase *envBase, bool rebuildMarkBits, boo
 
 	/* FixupRoots can always be done in parallel */
 	env->_compactStats._rootFixupStartTime = omrtime_hires_clock();
-	// DEV: step 3
 	_delegate.fixupRoots(env, this);
 	env->_compactStats._rootFixupEndTime = omrtime_hires_clock();
 
@@ -870,7 +851,6 @@ MM_CompactScheme::moveObjects(MM_EnvironmentStandard *env, uintptr_t &objectCoun
 			continue;
 		}
 		intptr_t i;
-		// DEV: each thread tries to get a sub area to work with
 		for (i = 0; subAreaTable[i].state != SubAreaEntry::end_segment; i++) {
 			if (changeSubAreaAction(env, &subAreaTable[i], SubAreaEntry::evacuating)) {
 				evacuateSubArea(env, region, subAreaTable, i, objectCount, byteCount, skippedObjectCount);
@@ -920,7 +900,6 @@ MM_CompactScheme::evacuateSubArea(MM_EnvironmentStandard *env, MM_HeapRegionDesc
 {
 	uintptr_t minFreeChunk = _extensions->tlhMinimumSize;
 
-	// DEV: this skips moving if state is fixup_only. Lets add a print check here
 	OMRPORT_ACCESS_FROM_OMRPORT(env->getPortLibrary());
 	if (subAreaTableEvacuate[i].state != SubAreaEntry::init) {
 		Assert_MM_true(subAreaTableEvacuate[i].state == SubAreaEntry::fixup_only);
@@ -1569,16 +1548,7 @@ MM_CompactScheme::changeSubAreaAction(MM_EnvironmentBase *env, SubAreaEntry * en
 		uintptr_t action = MM_AtomicOperations::lockCompareExchange(&entry->currentAction, previousAction, newAction);
 		if (action == previousAction) {
 			successful = true;
-			/*
-				Values for currentAction
-				0: none
-				1: setting_real_limits,
-				2: evacuating,
-				3: fixing_up,
-				4: rebuilding_mark_bits,
-				5: fixing_heap_for_walk
-			*/
-			// TODO: place printf here
+
 			OMRPORT_ACCESS_FROM_OMRPORT(env->getPortLibrary());
 			omrtty_printf("SHADMAN changeSubAreaAction: workerId=%02zu | entry=%p | prevAction=%zu | newAction=%zu\n", env->getWorkerID(), entry, previousAction, newAction);
 		} else {

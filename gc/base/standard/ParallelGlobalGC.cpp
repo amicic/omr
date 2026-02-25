@@ -1032,8 +1032,14 @@ MM_ParallelGlobalGC::mainThreadCompact(MM_EnvironmentBase *env, MM_AllocateDescr
 
 	reportCompactStart(env);
 	compactStats->_startTime = omrtime_hires_clock();
-	//TODO: Passing in true for nurseryOnly. Makethis conditional on aborted scavenge
-	MM_ParallelCompactTask compactTask(env, _dispatcher, _compactScheme, rebuildMarkBits, env->_cycleState->_gcCode.shouldAggressivelyCompact(), false);
+	//DEV: use nurseryOnly variable to control whether evacuate step of compact is skipped for tenure subareas
+	bool nurseryOnly = false;
+	if (CompactReason::COMPACT_ABORTED_SCAVENGE == compactStats->_compactReason)
+	{
+		omrtty_printf("SHADMAN mainThreadCompact Compact due to aborted scavange. Skipping evacuate for tenure subareas.\n");
+		nurseryOnly = true;
+	}
+	MM_ParallelCompactTask compactTask(env, _dispatcher, _compactScheme, rebuildMarkBits, env->_cycleState->_gcCode.shouldAggressivelyCompact(), nurseryOnly);
 	_dispatcher->run(env, &compactTask);
 	compactStats->_endTime = omrtime_hires_clock();
 	reportCompactEnd(env);
