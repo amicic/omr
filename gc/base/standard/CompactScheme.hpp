@@ -168,7 +168,7 @@ protected:
 	 */
 	void setRealLimitsSubAreas(MM_EnvironmentStandard *env);
 	void removeNullSubAreas(MM_EnvironmentStandard *env);
-	void completeSubAreaTable(MM_EnvironmentStandard *env);
+	void completeSubAreaTable(MM_EnvironmentStandard *env, bool nurseryOnly);
 
 	void saveForwardingPtr(class CompactTableEntry&,
 					omrobjectptr_t objectPtr,
@@ -218,7 +218,7 @@ protected:
 	void fixupSubArea(MM_EnvironmentStandard *env, omrobjectptr_t firstObject, omrobjectptr_t finish,  bool markedOnly, uintptr_t& objectCount);
 	void fixupObjects(MM_EnvironmentStandard *env, uintptr_t& objectCount);
 
-	void rebuildFreelist(MM_EnvironmentStandard *env);
+	void rebuildFreelist(MM_EnvironmentStandard *env, bool nurseryOnly);
 
 	void addFreeEntry(MM_EnvironmentStandard *env,
 					MM_MemorySubSpace *memorySubSpace,

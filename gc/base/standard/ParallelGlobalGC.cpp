@@ -1237,14 +1237,15 @@ MM_ParallelGlobalGC::processLargeAllocateStatsAfterSweep(MM_EnvironmentBase *env
 	MM_MemorySubSpace *tenureMemorySubspace = defaultMemorySpace->getTenureMemorySubSpace();
 	MM_MemoryPool *memoryPool = tenureMemorySubspace->getMemoryPool();
 	OMRPORT_ACCESS_FROM_OMRPORT(env->getPortLibrary());
+	omrtty_printf("SHADMAN processLargeAllocateStatsAfterSweep memory check actualFreeMemory=%zu \n", memoryPool->getActualFreeEntryCount());
 	uint64_t startTime = omrtime_hires_clock();
 	/* merge FreeEntry AllocateStats in tenure space */
 	memoryPool->mergeFreeEntryAllocateStats();
-
+	omrtty_printf("SHADMAN processLargeAllocateStatsAfterSweep memory check after merge actualFreeMemory=%zu \n", memoryPool->getActualFreeEntryCount());
 	MM_LargeObjectAllocateStats *stats = memoryPool->getLargeObjectAllocateStats();
 	stats->addTimeMergeAverage(omrtime_hires_clock() - startTime);
 
-	stats->verifyFreeEntryCount(memoryPool->getActualFreeEntryCount());
+	stats->verifyFreeEntryCount(memoryPool->getActualFreeEntryCount(), env);
 	/* estimate Fragmentation */
 	if ((GLOBALGC_ESTIMATE_FRAGMENTATION == (_extensions->estimateFragmentation & GLOBALGC_ESTIMATE_FRAGMENTATION))
 		&& _extensions->configuration->canCollectFragmentationStats(env)
