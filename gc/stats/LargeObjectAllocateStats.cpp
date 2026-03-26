@@ -1166,13 +1166,10 @@ MM_LargeObjectAllocateStats::getSizeClassIndex(uintptr_t size)
 void
 MM_LargeObjectAllocateStats::verifyFreeEntryCount(uintptr_t actualFreeEntryCount, MM_EnvironmentBase *env)
 {
-	OMRPORT_ACCESS_FROM_OMRPORT(env->getPortLibrary());
 	uintptr_t totalCount = 0;
 	for (intptr_t sizeClassIndex = 0; sizeClassIndex < (intptr_t)getMaxSizeClasses(); sizeClassIndex++) {
 		uintptr_t count = getFreeEntrySizeClassStats()->getCount(sizeClassIndex);
 		uintptr_t frequentAllocCount = getFreeEntrySizeClassStats()->getFrequentAllocCount(sizeClassIndex);
-		omrtty_printf("SHADMAN verifyFreeEntryCount sizeClassIndex=%zu count=%zu frequentAllocCount=%zu\n", 
-			sizeClassIndex, count, frequentAllocCount);
 		count += frequentAllocCount;
 		if (0 != count) {
 			totalCount += count;
@@ -1180,8 +1177,6 @@ MM_LargeObjectAllocateStats::verifyFreeEntryCount(uintptr_t actualFreeEntryCount
 			Assert_MM_true(frequentAllocCount <= count);
 		}
 	}
-	omrtty_printf("SHADMAN verifyFreeEntryCount totalCount=%zu actualFreeEntryCount=%zu\n", 
-			totalCount, actualFreeEntryCount);
 	Assert_MM_true(totalCount == actualFreeEntryCount);
 }
 

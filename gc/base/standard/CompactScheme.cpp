@@ -420,7 +420,6 @@ MM_CompactScheme::createSubAreaTable(MM_EnvironmentStandard *env, bool singleThr
 	if (env->_currentTask->synchronizeGCThreadsAndReleaseMain(env, UNIQUE_ID)) {
 		GC_HeapRegionIteratorStandard regionIterator(_rootManager);
 		uintptr_t i = 0;
-		OMRPORT_ACCESS_FROM_OMRPORT(env->getPortLibrary());
 		while(NULL != (region = regionIterator.nextRegion())) { // DEV: go through each region
 			if (!region->isCommitted() || (0 == region->getSize())) {
 				continue;
@@ -432,11 +431,8 @@ MM_CompactScheme::createSubAreaTable(MM_EnvironmentStandard *env, bool singleThr
 			MM_MemorySubSpace *memorySubSpace = region->getSubSpace();
 			intptr_t state = SubAreaEntry::init;
 			// DEV: if nurseryOnly, check for tenure region and set state to fixup_only to skip moving objects
-			omrtty_printf("SHADMAN createSubAreaTable Checking for tenure region...\n");
 			if(nurseryOnly && MEMORY_TYPE_OLD == memorySubSpace->getTypeFlags())
 			{
-				omrtty_printf("SHADMAN createSubAreaTable Found tenure region!\n");
-				omrtty_printf("SHADMAN createSubAreaTable memory check actualFreeMemory=%zu \n", memorySubSpace->getMemoryPool()->getActualFreeEntryCount());
 				state = SubAreaEntry::fixup_only;
 			}
 
@@ -455,22 +451,14 @@ MM_CompactScheme::createSubAreaTable(MM_EnvironmentStandard *env, bool singleThr
 				_subAreaTable[i].memoryPool = memorySubSpace->getMemoryPool(p);
 				_subAreaTable[i].state = state;
 				_subAreaTable[i++].currentAction = SubAreaEntry::none;
-				omrtty_printf("SHADMAN createSubAreaTable: i=%zu | entry=%p | memoryType=%zu | firstObject=%p | freeChunk=%p | state=%zu \n", i-1, &_subAreaTable[i-1], memorySubSpace->getTypeFlags(), _subAreaTable[i-1].firstObject, _subAreaTable[i-1].freeChunk, _subAreaTable[i-1].state);
 			}
 			_subAreaTable[i].freeChunk = (omrobjectptr_t)highAddress;
 			_subAreaTable[i].memoryPool = NULL;
 			_subAreaTable[i].firstObject = (omrobjectptr_t)highAddress;
 			_subAreaTable[i].state = SubAreaEntry::end_segment;
 			_subAreaTable[i++].currentAction = SubAreaEntry::none;
-			omrtty_printf("SHADMAN createSubAreaTable: i=%zu | entry=%p | memoryType=%zu | firstObject=%p | freeChunk=%p | state=%zu \n", i-1 ,&_subAreaTable[i-1], memorySubSpace->getTypeFlags(), _subAreaTable[i-1].firstObject, _subAreaTable[i-1].freeChunk, _subAreaTable[i-1].state);
-			if(nurseryOnly && MEMORY_TYPE_OLD == memorySubSpace->getTypeFlags())
-			{
-				omrtty_printf("SHADMAN createSubAreaTable memory check actualFreeMemory=%zu \n", memorySubSpace->getMemoryPool()->getActualFreeEntryCount());
-			}
 		}
 		_subAreaTable[i].state = SubAreaEntry::end_heap;
-		omrtty_printf("SHADMAN createSubAreaTable: i=%zu | entry=%p | firstObject=%p |  freeChunk=%p | state=%zu \n", i ,&_subAreaTable[i], _subAreaTable[i].firstObject, _subAreaTable[i].freeChunk, _subAreaTable[i].state);
-
 
 		env->_currentTask->releaseSynchronizedGCThreads(env);
 	}
@@ -500,9 +488,6 @@ MM_CompactScheme::setRealLimitsSubAreas(MM_EnvironmentStandard *env)
 
 			_subAreaTable[i].firstObject = objectPtr;
 			Assert_MM_true(objectPtr == 0 || _markMap->isBitSet(objectPtr));
-
-			OMRPORT_ACCESS_FROM_OMRPORT(env->getPortLibrary());
-			omrtty_printf("SHADMAN setRealLimitsSubAreas: i=%zu | workerId=%02zu | entry=%p | firstObject=%p | state=%zu \n", i, env->getWorkerID(), &_subAreaTable[i], _subAreaTable[i].firstObject, _subAreaTable[i].state);
 		}
 	}
 }
@@ -518,9 +503,6 @@ MM_CompactScheme::removeNullSubAreas(MM_EnvironmentStandard *env)
 		_compactFrom = (omrobjectptr_t)_heap->getHeapTop();
 		_compactTo   = (omrobjectptr_t)_heap->getHeapBase();
 
-		OMRPORT_ACCESS_FROM_OMRPORT(env->getPortLibrary());
-		omrtty_printf("SHADMAN removeNullSubAreas: compactFrom=%p | compactTo=%p\n", _compactFrom, _compactTo);
-
 		uintptr_t j = 0;
 		for (uintptr_t i = 0; _subAreaTable[i].state != SubAreaEntry::end_heap; i++) {
 			if (NULL != _subAreaTable[i].firstObject) {
@@ -532,7 +514,6 @@ MM_CompactScheme::removeNullSubAreas(MM_EnvironmentStandard *env)
 					_compactTo = (_compactTo > _subAreaTable[j].firstObject) ? _compactTo : _subAreaTable[j].firstObject;
 				}
 				_subAreaTable[j].freeChunk = 0;
-				omrtty_printf("SHADMAN removeNullSubAreas: j=%2zu | compactFrom=%p | compactTo=%p\n", j, _compactFrom, _compactTo);
 				j++;
 			}
 		}
@@ -559,12 +540,8 @@ MM_CompactScheme::completeSubAreaTable(MM_EnvironmentStandard *env, bool nursery
 			}
 			MM_MemorySubSpace *subspace = region->getSubSpace();
 			// DEV: skip resetting memory pool for tenure in aborted scavenge case
-			OMRPORT_ACCESS_FROM_OMRPORT(env->getPortLibrary());
-			omrtty_printf("SHADMAN completeSubAreaTable Checking for tenure region...\n");
 			if(nurseryOnly && MEMORY_TYPE_OLD == subspace->getTypeFlags())
 			{
-				omrtty_printf("SHADMAN completeSubAreaTable Skipping memory reset for tenure region!\n");
-				omrtty_printf("SHADMAN completeSubAreaTable memory check actualFreeMemory=%zu \n", subspace->getMemoryPool()->getActualFreeEntryCount());
 				continue;
 			}
 
@@ -659,7 +636,10 @@ MM_CompactScheme::compact(MM_EnvironmentBase *envBase, bool rebuildMarkBits, boo
 		MM_HeapMemoryPoolIterator poolIterator(env, _extensions->heap);
 
 		while(NULL != (memoryPool = poolIterator.nextPool())) {
-			memoryPool->postProcess(env, MM_MemoryPool::forCompact);
+			if (!nurseryOnly || MEMORY_TYPE_OLD != memoryPool->getSubSpace()->getTypeFlags())
+			{
+				memoryPool->postProcess(env, MM_MemoryPool::forCompact);
+			}
 		}
 
 		MM_AtomicOperations::sync();
@@ -701,19 +681,12 @@ void MM_CompactScheme::rebuildFreelist(MM_EnvironmentStandard *env, bool nursery
 	GC_HeapRegionIteratorStandard regionIterator(regionManager);
 	MM_HeapRegionDescriptorStandard *region = NULL;
 	SubAreaEntry *subAreaTable = _subAreaTable;
-	
-	OMRPORT_ACCESS_FROM_OMRPORT(env->getPortLibrary());
 
 	while(NULL != (region = regionIterator.nextRegion())) {
 		if (!region->isCommitted() || (0 == region->getSize())) {
 			continue;
 		}
 		MM_MemorySubSpace *memorySubSpace = region->getSubSpace();
-		if(nurseryOnly && MEMORY_TYPE_OLD == memorySubSpace->getTypeFlags())
-			{
-				omrtty_printf("SHADMAN rebuildFreeList memory check actualFreeMemory=%zu \n", memorySubSpace->getMemoryPool()->getActualFreeEntryCount());
-			}
-	
 		Assert_MM_true(region->getLowAddress() == subAreaTable[i].firstObject);
 
 		MM_CompactMemoryPoolState poolStateObj;
@@ -726,13 +699,8 @@ void MM_CompactScheme::rebuildFreelist(MM_EnvironmentStandard *env, bool nursery
 		poolState->_memoryPool = subAreaTable[i].memoryPool;
 
 		do {
-			omrtty_printf("SHADMAN rebuildFreelist memoryType=%zu i=%3zu entry=%p lowAddress=%p firstObject=%p\n", 
-				region->getSubSpace()->getTypeFlags(), i, &subAreaTable[i], region->getLowAddress(), subAreaTable[i].firstObject);
 			if(nurseryOnly && MEMORY_TYPE_OLD == memorySubSpace->getTypeFlags())
 			{
-				omrtty_printf("SHADMAN rebuildFreelist i=%3zu Skipping for tenure region!\n", i);
-				omrtty_printf("SHADMAN rebuildFreelist memory check actualFreeMemory=%zu \n", memorySubSpace->getMemoryPool()->getActualFreeEntryCount());
-				//i++;
 				continue;
 			}
 
@@ -775,7 +743,6 @@ void MM_CompactScheme::rebuildFreelist(MM_EnvironmentStandard *env, bool nursery
 
 		if(nurseryOnly && MEMORY_TYPE_OLD == memorySubSpace->getTypeFlags())
 		{
-			omrtty_printf("SHADMAN createSubAreaTable memory check actualFreeMemory=%zu \n", memorySubSpace->getMemoryPool()->getActualFreeEntryCount());
 			continue;
 		}
 	
@@ -940,10 +907,8 @@ MM_CompactScheme::evacuateSubArea(MM_EnvironmentStandard *env, MM_HeapRegionDesc
 {
 	uintptr_t minFreeChunk = _extensions->tlhMinimumSize;
 
-	OMRPORT_ACCESS_FROM_OMRPORT(env->getPortLibrary());
 	if (subAreaTableEvacuate[i].state != SubAreaEntry::init) {
 		Assert_MM_true(subAreaTableEvacuate[i].state == SubAreaEntry::fixup_only);
-		omrtty_printf("SHADMAN evacuateSubArea Skipping evacuate for subarea entry %p \n", &subAreaTableEvacuate[i]);
 		return;
 	}
 	uintptr_t nobjects = 0;
@@ -1589,8 +1554,6 @@ MM_CompactScheme::changeSubAreaAction(MM_EnvironmentBase *env, SubAreaEntry * en
 		if (action == previousAction) {
 			successful = true;
 
-			OMRPORT_ACCESS_FROM_OMRPORT(env->getPortLibrary());
-			omrtty_printf("SHADMAN changeSubAreaAction: workerId=%02zu | entry=%p | prevAction=%zu | newAction=%zu\n", env->getWorkerID(), entry, previousAction, newAction);
 		} else {
 			/* during this phase it's only legitimate to change to newAction so if currentAction changed underneath us that had better be its new value */
 			Assert_MM_true(action == newAction);

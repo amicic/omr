@@ -483,6 +483,9 @@ MM_MemoryPoolSplitAddressOrderedList::reset(Cause cause)
 void
 MM_MemoryPoolSplitAddressOrderedList::postProcess(MM_EnvironmentBase* env, Cause cause)
 {
+	// DEV: check to see if MemoryPool is changed here
+	OMRPORT_ACCESS_FROM_OMRPORT(env->getPortLibrary());
+	omrtty_printf("SHADMAN MemoryPoolSplitAddressOrderedList postProcess");
 	bool const compressed = compressObjectReferences();
 	uintptr_t lastFreeListIndex = _heapFreeListCount - 1;
 	if (cause == forCompact && (lastFreeListIndex != 0)) {
