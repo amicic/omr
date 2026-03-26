@@ -197,8 +197,6 @@ public:
 		return 0;
 	}
 	
-	// DEV: this value is possibly less than it's supposed to be. Check where in the compact process this value
-	// maybe reset or skipped
 	MMINLINE virtual uintptr_t getActualFreeEntryCount() { return _freeEntryCount; }
 	
 	MMINLINE void setFreeMemorySize(uintptr_t freeMemorySize) { _freeMemorySize = freeMemorySize; }

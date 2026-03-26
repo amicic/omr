@@ -4475,24 +4475,19 @@ MM_Scavenger::processLargeAllocateStatsAfterGC(MM_EnvironmentBase *env)
 	MM_MemoryPool *memoryPool = tenureMemorySubspace->getMemoryPool();
 
 	OMRPORT_ACCESS_FROM_OMRPORT(env->getPortLibrary());
-	omrtty_printf("SHADMAN processLargeAllocateStatsAfterGC memory check actualFreeMemory=%zu \n", memoryPool->getActualFreeEntryCount());
 	uint64_t startTime = omrtime_hires_clock();
 
 	/* merge and average largeObjectAllocateStats in tenure space */
 	memoryPool->mergeLargeObjectAllocateStats();
-	omrtty_printf("SHADMAN processLargeAllocateStatsAfterGC memory check after merge LOA actualFreeMemory=%zu \n", memoryPool->getActualFreeEntryCount());
 	memoryPool->mergeTlhAllocateStats();
-	omrtty_printf("SHADMAN processLargeAllocateStatsAfterGC memory check after merge TLH actualFreeMemory=%zu \n", memoryPool->getActualFreeEntryCount());
 	/* TODO: need to consider allocation form mutators for averaging later, currently only average allocation from collectors */
 	memoryPool->averageLargeObjectAllocateStats(env, _extensions->scavengerStats._tenureAggregateBytes);
-	omrtty_printf("SHADMAN processLargeAllocateStatsAfterGC memory check after avg LOA actualFreeMemory=%zu \n", memoryPool->getActualFreeEntryCount());
 	/* merge FreeEntry AllocateStats in tenure space */
 	memoryPool->mergeFreeEntryAllocateStats();
-	omrtty_printf("SHADMAN processLargeAllocateStatsAfterGC memory check after merge free entry actualFreeMemory=%zu \n", memoryPool->getActualFreeEntryCount());
 	MM_LargeObjectAllocateStats *stats = memoryPool->getLargeObjectAllocateStats();
 	stats->setTimeMergeAverage(omrtime_hires_clock() - startTime);
 
-	stats->verifyFreeEntryCount(memoryPool->getActualFreeEntryCount(), env);
+	stats->verifyFreeEntryCount(memoryPool->getActualFreeEntryCount());
 	/* estimate Fragmentation */
 	if ((GLOBALGC_ESTIMATE_FRAGMENTATION == (_extensions->estimateFragmentation & GLOBALGC_ESTIMATE_FRAGMENTATION))
 		&& _extensions->configuration->canCollectFragmentationStats(env)

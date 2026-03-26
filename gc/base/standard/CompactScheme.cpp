@@ -357,7 +357,7 @@ MM_CompactScheme::workerSetupForGC(MM_EnvironmentStandard *env, bool singleThrea
 	createSubAreaTable(env, singleThreaded, nurseryOnly);
 	setRealLimitsSubAreas(env);
 	removeNullSubAreas(env);
-	// TODO: we need nurserOnly in this
+	// TODO: check if we need this
 	completeSubAreaTable(env, nurseryOnly);
 }
 
@@ -420,17 +420,15 @@ MM_CompactScheme::createSubAreaTable(MM_EnvironmentStandard *env, bool singleThr
 	if (env->_currentTask->synchronizeGCThreadsAndReleaseMain(env, UNIQUE_ID)) {
 		GC_HeapRegionIteratorStandard regionIterator(_rootManager);
 		uintptr_t i = 0;
-		while(NULL != (region = regionIterator.nextRegion())) { // DEV: go through each region
+		while(NULL != (region = regionIterator.nextRegion())) {
 			if (!region->isCommitted() || (0 == region->getSize())) {
 				continue;
 			}
-			// DEV: get details of region
 			void *lowAddress = region->getLowAddress();
 			void *highAddress = region->getHighAddress();
 			uintptr_t areaSize = region->getSize();
 			MM_MemorySubSpace *memorySubSpace = region->getSubSpace();
 			intptr_t state = SubAreaEntry::init;
-			// DEV: if nurseryOnly, check for tenure region and set state to fixup_only to skip moving objects
 			if(nurseryOnly && MEMORY_TYPE_OLD == memorySubSpace->getTypeFlags())
 			{
 				state = SubAreaEntry::fixup_only;
@@ -502,7 +500,6 @@ MM_CompactScheme::removeNullSubAreas(MM_EnvironmentStandard *env)
 	if (env->_currentTask->synchronizeGCThreadsAndReleaseMain(env, UNIQUE_ID)) {
 		_compactFrom = (omrobjectptr_t)_heap->getHeapTop();
 		_compactTo   = (omrobjectptr_t)_heap->getHeapBase();
-
 		uintptr_t j = 0;
 		for (uintptr_t i = 0; _subAreaTable[i].state != SubAreaEntry::end_heap; i++) {
 			if (NULL != _subAreaTable[i].firstObject) {
@@ -539,7 +536,7 @@ MM_CompactScheme::completeSubAreaTable(MM_EnvironmentStandard *env, bool nursery
 				continue;
 			}
 			MM_MemorySubSpace *subspace = region->getSubSpace();
-			// DEV: skip resetting memory pool for tenure in aborted scavenge case
+			// TODO: do we need this?
 			if(nurseryOnly && MEMORY_TYPE_OLD == subspace->getTypeFlags())
 			{
 				continue;
@@ -553,9 +550,6 @@ MM_CompactScheme::completeSubAreaTable(MM_EnvironmentStandard *env, bool nursery
 	}
 }
 
-// DEV: bool nurseryOnly controls whether move step of compact will be skipped for tenure in aborted scavenge
-// upwards (Compact Parallel Task, Parallel Global GC), where we have to pass  true only when doing compact for abort reason
-// downwards to where we set fixup_only
 void
 MM_CompactScheme::compact(MM_EnvironmentBase *envBase, bool rebuildMarkBits, bool aggressive, bool nurseryOnly)
 {
@@ -1553,7 +1547,6 @@ MM_CompactScheme::changeSubAreaAction(MM_EnvironmentBase *env, SubAreaEntry * en
 		uintptr_t action = MM_AtomicOperations::lockCompareExchange(&entry->currentAction, previousAction, newAction);
 		if (action == previousAction) {
 			successful = true;
-
 		} else {
 			/* during this phase it's only legitimate to change to newAction so if currentAction changed underneath us that had better be its new value */
 			Assert_MM_true(action == newAction);

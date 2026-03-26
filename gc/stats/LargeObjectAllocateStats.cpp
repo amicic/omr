@@ -1164,7 +1164,7 @@ MM_LargeObjectAllocateStats::getSizeClassIndex(uintptr_t size)
 }
 
 void
-MM_LargeObjectAllocateStats::verifyFreeEntryCount(uintptr_t actualFreeEntryCount, MM_EnvironmentBase *env)
+MM_LargeObjectAllocateStats::verifyFreeEntryCount(uintptr_t actualFreeEntryCount)
 {
 	uintptr_t totalCount = 0;
 	for (intptr_t sizeClassIndex = 0; sizeClassIndex < (intptr_t)getMaxSizeClasses(); sizeClassIndex++) {
