@@ -357,7 +357,6 @@ MM_CompactScheme::workerSetupForGC(MM_EnvironmentStandard *env, bool singleThrea
 	createSubAreaTable(env, singleThreaded, nurseryOnly);
 	setRealLimitsSubAreas(env);
 	removeNullSubAreas(env);
-	// TODO: check if we need this
 	completeSubAreaTable(env, nurseryOnly);
 }
 
@@ -536,7 +535,6 @@ MM_CompactScheme::completeSubAreaTable(MM_EnvironmentStandard *env, bool nursery
 				continue;
 			}
 			MM_MemorySubSpace *subspace = region->getSubSpace();
-			// TODO: do we need this?
 			if(nurseryOnly && MEMORY_TYPE_OLD == subspace->getTypeFlags())
 			{
 				continue;
@@ -693,10 +691,11 @@ void MM_CompactScheme::rebuildFreelist(MM_EnvironmentStandard *env, bool nursery
 		poolState->_memoryPool = subAreaTable[i].memoryPool;
 
 		do {
-			if(nurseryOnly && MEMORY_TYPE_OLD == memorySubSpace->getTypeFlags())
+			// TODO: Not sure if we need this
+			/*if(nurseryOnly && MEMORY_TYPE_OLD == memorySubSpace->getTypeFlags())
 			{
 				continue;
-			}
+			}*/
 
 			if (NULL != subAreaTable[i].freeChunk) {
 				if (subAreaTable[i].freeChunk == subAreaTable[i].firstObject) {
@@ -735,10 +734,11 @@ void MM_CompactScheme::rebuildFreelist(MM_EnvironmentStandard *env, bool nursery
 			}
         } while (subAreaTable[i++].state != SubAreaEntry::end_segment);
 
-		if(nurseryOnly && MEMORY_TYPE_OLD == memorySubSpace->getTypeFlags())
+		// TODO: Not sure if we need this
+		/*if(nurseryOnly && MEMORY_TYPE_OLD == memorySubSpace->getTypeFlags())
 		{
 			continue;
-		}
+		}*/
 	
 		Assert_MM_true(currentFreeBase == NULL);
 
