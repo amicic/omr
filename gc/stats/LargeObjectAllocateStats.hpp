@@ -195,7 +195,6 @@ public:
 
 	/* accumulate freeEntryCount from FreeEntrySizeClassStats and verify the count with memoryPool actualFreeEntryCount  */
 	void verifyFreeEntryCount(uintptr_t actualFreeEntryCount);
-
 #if defined(OMR_GC_THREAD_LOCAL_HEAP)
 	MM_FreeEntrySizeClassStats *getTlhAllocSizeClassStats() { return &_tlhAllocSizeClassStats; }
 	uintptr_t getTlhAllocSizeClassCount(uintptr_t sizeClassIndex) { return _tlhAllocSizeClassStats._count[sizeClassIndex]; }
