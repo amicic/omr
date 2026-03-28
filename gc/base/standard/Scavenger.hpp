@@ -37,6 +37,7 @@
 #include "CopyScanCacheList.hpp"
 #include "CopyScanCacheStandard.hpp"
 #include "CycleState.hpp"
+#include "ForwardedHeader.hpp"
 #include "GCExtensionsBase.hpp"
 #if defined(OMR_GC_CONCURRENT_SCAVENGER)
 #include "MainGCThread.hpp"
@@ -262,16 +263,16 @@ public:
 	 * Implementation of CopyAndForward for slotObject input format
 	 * @param slotObject input field in slotObject format
 	 */
-	MMINLINE bool copyAndForward(MM_EnvironmentStandard *env, GC_SlotObject *slotObject);
+	template <bool variant> bool copyAndForward(MM_EnvironmentStandard *env, GC_SlotObject *slotObject);
 
-	MMINLINE bool copyAndForward(MM_EnvironmentStandard *env, volatile omrobjectptr_t *objectPtrIndirect);
+	template <bool variant> bool copyAndForward(MM_EnvironmentStandard *env, volatile omrobjectptr_t *objectPtrIndirect);
 
 	/**
 	 * Handle the path after a failed attempt to forward an object:
 	 * try to reuse or abandon reserved memory for this threads destination object candidate.
 	 * Infrequent path, hence not inlined.
 	 */
-	void forwardingFailed(MM_EnvironmentStandard *env, MM_ForwardedHeader* forwardedHeader, omrobjectptr_t destinationObjectPtr, MM_CopyScanCacheStandard *copyCache);
+	void forwardingFailed(MM_EnvironmentStandard *env, MM_ForwardedHeader *forwardedHeader, omrobjectptr_t destinationObjectPtr, MM_CopyScanCacheStandard *copyCache);
 	
 	/**
 	 * Handle the path after a succeesful attempt to forward an object:
@@ -280,8 +281,7 @@ public:
 	 */	
 	MMINLINE void forwardingSucceeded(MM_EnvironmentStandard *env, MM_CopyScanCacheStandard *copyCache, void *newCacheAlloc, uintptr_t oldObjectAge, uintptr_t objectCopySizeInBytes, uintptr_t objectReserveSizeInBytes);
 
-	MMINLINE omrobjectptr_t copy(MM_EnvironmentStandard *env, MM_ForwardedHeader* forwardedHeader);
-	template <bool variant> omrobjectptr_t copyForVariant(MM_EnvironmentStandard *env, MM_ForwardedHeader* forwardedHeader);
+	template <bool variant> omrobjectptr_t copyForVariant(MM_EnvironmentStandard *env, MM_ForwardedHeader *forwardedHeader);
 	
 	/* Flush remaining Copy Scan updates which would otherwise be discarded 
 	 * @param majorFlush last thread to flush updates should perform a major flush (push accumulated updates to history record) 
@@ -914,8 +914,28 @@ public:
 	 * @param[in/out] slotPtr Pointer to slot holding reference to object to be copied and forwarded
 	 */
 	bool copyObjectSlot(MM_EnvironmentStandard *env, volatile omrobjectptr_t *slotPtr);
-	bool copyObjectSlot(MM_EnvironmentStandard *env, GC_SlotObject* slotObject);
-	omrobjectptr_t copyObject(MM_EnvironmentStandard *env, MM_ForwardedHeader* forwardedHeader);
+	bool copyObjectSlot(MM_EnvironmentStandard *env, GC_SlotObject  *slotObject);
+
+
+	MMINLINE bool copyObjectSlotInline(MM_EnvironmentStandard *env, volatile omrobjectptr_t *slotPtr)
+	{
+		if (IS_CONCURRENT_ENABLED) {
+			return copyAndForward<CS>(env, slotPtr);
+		} else {
+			return copyAndForward<STW>(env, slotPtr);
+		}
+	}
+
+	MMINLINE bool copyObjectSlotInline(MM_EnvironmentStandard *env, GC_SlotObject *slotObject)
+	{
+		if (IS_CONCURRENT_ENABLED) {
+			return copyAndForward<CS>(env, slotObject);
+		} else {
+			return copyAndForward<STW>(env, slotObject);
+		}
+	}
+
+	omrobjectptr_t copyObject(MM_EnvironmentStandard *env, MM_ForwardedHeader *forwardedHeader);
 
 	/**
 	 * Update the given slot to point at the new location of the object, after copying

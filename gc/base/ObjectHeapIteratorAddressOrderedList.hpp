@@ -147,8 +147,6 @@ public:
 	 */
 	MMINLINE virtual omrobjectptr_t nextObject()
 	{
-		omrobjectptr_t currentObject;
-
 		while(_scanPtr < _scanPtrTop) {
 #if defined(OMR_GC_CONCURRENT_SCAVENGER)
 			/* There are no known users of this type of iteration, while there are still forwarded objects in the heap */
@@ -156,7 +154,7 @@ public:
 #endif
 		
 			_isDeadObject = _extensions->objectModel.isDeadObject(_scanPtr);
-			currentObject = _scanPtr;
+			omrobjectptr_t currentObject = _scanPtr;
 			if(!_isDeadObject) {
 				_scanPtr = (omrobjectptr_t) ( ((uintptr_t)_scanPtr) + _extensions->objectModel.getConsumedSizeInBytesWithHeader(_scanPtr) );
 				return currentObject;
@@ -172,6 +170,17 @@ public:
 					return currentObject;
 				}
 			}
+		}
+
+		return NULL;
+	}
+
+	omrobjectptr_t nextObjectFast()
+	{
+		while (_scanPtr < _scanPtrTop) {
+			omrobjectptr_t currentObject = _scanPtr;
+			_scanPtr = (omrobjectptr_t) ( ((uintptr_t)_scanPtr) + _extensions->objectModel.getConsumedSizeInBytesWithHeader(_scanPtr) );
+			return currentObject;
 		}
 
 		return NULL;

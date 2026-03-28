@@ -84,6 +84,8 @@
 #error "mask overlap: OMR_OBJECT_METADATA_FLAGS_MASK, COPY_PROGRESS_INFO_MASK"
 #endif
 
+enum CopyVariant : bool { STW = false, CS = true };
+
 /**
  * Scavenger forwarding header is used to distinguish objects in evacuate space that are being/have been
  * copied into survivor space. Client classes provide an uintptr_t-aligned offset from the head of the
@@ -303,7 +305,29 @@ public:
 	/**
 	 * Return the (strictly) forwarded version of the object, or NULL if the object has not been (strictly) forwarded.
 	 */
+
 	omrobjectptr_t getForwardedObject();
+
+	template <bool variant> omrobjectptr_t getForwardedObjectForVariant()
+	{
+		omrobjectptr_t forwardedObject = NULL;
+
+		uintptr_t forwardedTag = _forwardedTag;
+		bool isForwarded = false;
+
+		if (CS == variant) {
+			forwardedTag = _forwardedTag | _beingCopiedHint;
+			isForwarded = isStrictlyForwardedPointer();
+		} else {
+			isForwarded = isForwardedPointer();
+		}
+
+		if (isForwarded) {
+			forwardedObject = (omrobjectptr_t)(getCanonicalPreserved() & ~forwardedTag);
+		}
+
+		return forwardedObject;
+	}
 	
 	/**
 	 * Get either strict or non-strict forwarded version of the object, or NULL if object is not forwarded at all.
