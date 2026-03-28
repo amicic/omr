@@ -144,34 +144,45 @@ public:
 
 	/**
 	 * @see GC_ObjectHeapIterator::nextObject()
+	 * Unlike nextObjectNoAdvance(), this method does not consider for forwarded objects,
+	 * since there are no users of this API where such object could exist.
 	 */
 	MMINLINE virtual omrobjectptr_t nextObject()
 	{
-		omrobjectptr_t currentObject;
-
-		while(_scanPtr < _scanPtrTop) {
-#if defined(OMR_GC_CONCURRENT_SCAVENGER)
-			/* There are no known users of this type of iteration, while there are still forwarded objects in the heap */
-			Assert_MM_false(MM_ForwardedHeader(_scanPtr, _extensions->compressObjectReferences()).isForwardedPointer());
-#endif
+		while (_scanPtr < _scanPtrTop) {
 		
 			_isDeadObject = _extensions->objectModel.isDeadObject(_scanPtr);
-			currentObject = _scanPtr;
-			if(!_isDeadObject) {
+			omrobjectptr_t currentObject = _scanPtr;
+			if (!_isDeadObject) {
 				_scanPtr = (omrobjectptr_t) ( ((uintptr_t)_scanPtr) + _extensions->objectModel.getConsumedSizeInBytesWithHeader(_scanPtr) );
 				return currentObject;
 			} else {
 				_isSingleSlotHole = _extensions->objectModel.isSingleSlotDeadObject(_scanPtr);
-				if(_isSingleSlotHole) {
+				if (_isSingleSlotHole) {
 					_deadObjectSize = _extensions->objectModel.getSizeInBytesSingleSlotDeadObject(_scanPtr);
 				} else {
 					_deadObjectSize = _extensions->objectModel.getSizeInBytesMultiSlotDeadObject(_scanPtr);
 				}
 				_scanPtr = (omrobjectptr_t)( ((uintptr_t)_scanPtr) + _deadObjectSize );
-				if(_includeDeadObjects) {
+				if (_includeDeadObjects) {
 					return currentObject;
 				}
 			}
+		}
+
+		return NULL;
+	}
+
+	/**
+	 * Fast variant of nextObject(), that does not consider dead objects (nor forwarded objects).
+	 * Applicable in some special cases (for example, iteration of scan-copy caches).
+	 */
+	MMINLINE omrobjectptr_t nextObjectFast()
+	{
+		if (_scanPtr < _scanPtrTop) {
+			omrobjectptr_t currentObject = _scanPtr;
+			_scanPtr = (omrobjectptr_t) ( ((uintptr_t)_scanPtr) + _extensions->objectModel.getConsumedSizeInBytesWithHeader(_scanPtr) );
+			return currentObject;
 		}
 
 		return NULL;

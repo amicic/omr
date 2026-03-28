@@ -74,8 +74,8 @@ GC_ObjectHeapIteratorAddressOrderedList::shouldReturnCurrentObject() {
 			_deadObjectSize = computeDeadObjectSize();
 			return _includeDeadObjects;
 #if defined(OMR_GC_CONCURRENT_SCAVENGER)
-		} else if (MM_ForwardedHeader(_scanPtr, _extensions->compressObjectReferences()).isStrictlyForwardedPointer()) {
-			return _includeForwardedObjects;
+		} else if (_includeForwardedObjects) {
+			return MM_ForwardedHeader(_scanPtr, _extensions->compressObjectReferences()).isStrictlyForwardedPointer();
 #endif /* OMR_GC_CONCURRENT_SCAVENGER */
 		} else {
 			return true;
