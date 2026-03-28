@@ -37,6 +37,7 @@
 #include "CopyScanCacheList.hpp"
 #include "CopyScanCacheStandard.hpp"
 #include "CycleState.hpp"
+#include "ForwardedHeader.hpp"
 #include "GCExtensionsBase.hpp"
 #if defined(OMR_GC_CONCURRENT_SCAVENGER)
 #include "MainGCThread.hpp"
@@ -169,17 +170,17 @@ private:
 	void restoreMainThreadTenureTLHRemainders(MM_EnvironmentStandard *env);
 	
 	void setBackOutFlag(MM_EnvironmentBase *env, BackOutState value);
-	MMINLINE bool isBackOutFlagRaised() { return _extensions->isScavengerBackOutFlagRaised(); }
+	bool isBackOutFlagRaised() { return _extensions->isScavengerBackOutFlagRaised(); }
 	
 	/**
 	 * Check if concurrent phase of the cycle should yield to an external activity. If so, set the flag so that other GC threads react appropriately
 	 */ 
-	MMINLINE bool checkAndSetShouldYieldFlag(MM_EnvironmentStandard *env);
+	bool checkAndSetShouldYieldFlag(MM_EnvironmentStandard *env);
 	
 	/**
 	 * Check if top level scan loop should be aborted before the work is done
 	 */
-	MMINLINE bool shouldAbortScanLoop(MM_EnvironmentStandard *env) {
+	bool shouldAbortScanLoop(MM_EnvironmentStandard *env) {
 		bool shouldAbort = false;
 
 #if defined(OMR_GC_CONCURRENT_SCAVENGER)
@@ -248,12 +249,12 @@ public:
 	 * @param[out]shouldRemember
 	 * @return the object scanner
 	 */
-	MMINLINE GC_ObjectScanner *getObjectScanner(MM_EnvironmentStandard *env, omrobjectptr_t objectptr, void *objectScannerState, uintptr_t flags, MM_ScavengeScanReason reason, bool *shouldRemember);
+	GC_ObjectScanner *getObjectScanner(MM_EnvironmentStandard *env, omrobjectptr_t objectptr, void *objectScannerState, uintptr_t flags, MM_ScavengeScanReason reason, bool *shouldRemember);
 
 	uintptr_t calculateCopyScanCacheSizeForWaitingThreads(uintptr_t maxCacheSize, uintptr_t threadCount, uintptr_t waitingThreads);
 	uintptr_t calculateCopyScanCacheSizeForQueueLength(uintptr_t maxCacheSize, uintptr_t threadCount, uintptr_t scanCacheCount);
-	MMINLINE uintptr_t calculateOptimumCopyScanCacheSize(MM_EnvironmentStandard *env);
-	MMINLINE MM_CopyScanCacheStandard *reserveMemoryForAllocateInSemiSpace(MM_EnvironmentStandard *env, omrobjectptr_t objectToEvacuate, uintptr_t objectReserveSizeInBytes);
+	uintptr_t calculateOptimumCopyScanCacheSize(MM_EnvironmentStandard *env);
+	MM_CopyScanCacheStandard *reserveMemoryForAllocateInSemiSpace(MM_EnvironmentStandard *env, omrobjectptr_t objectToEvacuate, uintptr_t objectReserveSizeInBytes);
 	MM_CopyScanCacheStandard *reserveMemoryForAllocateInTenureSpace(MM_EnvironmentStandard *env, omrobjectptr_t objectToEvacuate, uintptr_t objectReserveSizeInBytes);
 
 	MM_CopyScanCacheStandard *getNextScanCache(MM_EnvironmentStandard *env);
@@ -262,9 +263,9 @@ public:
 	 * Implementation of CopyAndForward for slotObject input format
 	 * @param slotObject input field in slotObject format
 	 */
-	MMINLINE bool copyAndForward(MM_EnvironmentStandard *env, GC_SlotObject *slotObject);
+	template <bool variant> bool copyAndForward(MM_EnvironmentStandard *env, GC_SlotObject *slotObject);
 
-	MMINLINE bool copyAndForward(MM_EnvironmentStandard *env, volatile omrobjectptr_t *objectPtrIndirect);
+	template <bool variant> bool copyAndForward(MM_EnvironmentStandard *env, volatile omrobjectptr_t *objectPtrIndirect);
 
 	/**
 	 * Handle the path after a failed attempt to forward an object:
@@ -278,30 +279,30 @@ public:
 	 * Update the alloc pointer and update various stats.
 	 * Frequent path, hence inlined.
 	 */	
-	MMINLINE void forwardingSucceeded(MM_EnvironmentStandard *env, MM_CopyScanCacheStandard *copyCache, void *newCacheAlloc, uintptr_t oldObjectAge, uintptr_t objectCopySizeInBytes, uintptr_t objectReserveSizeInBytes);
+	void forwardingSucceeded(MM_EnvironmentStandard *env, MM_CopyScanCacheStandard *copyCache, void *newCacheAlloc, uintptr_t oldObjectAge, uintptr_t objectCopySizeInBytes, uintptr_t objectReserveSizeInBytes);
 
-	MMINLINE omrobjectptr_t copy(MM_EnvironmentStandard *env, MM_ForwardedHeader* forwardedHeader);
+	omrobjectptr_t copy(MM_EnvironmentStandard *env, MM_ForwardedHeader* forwardedHeader);
 	template <bool variant> omrobjectptr_t copyForVariant(MM_EnvironmentStandard *env, MM_ForwardedHeader* forwardedHeader);
 	
 	/* Flush remaining Copy Scan updates which would otherwise be discarded 
 	 * @param majorFlush last thread to flush updates should perform a major flush (push accumulated updates to history record) 
 	 */ 
-	MMINLINE void flushCopyScanCounts(MM_EnvironmentBase* env, bool majorFlush);
+	void flushCopyScanCounts(MM_EnvironmentBase* env, bool majorFlush);
 
 	/* Depth copy the hot fields of an object.
 	 * @param forwardedHeader Forwarded header of an object
 	 * @param destinationObjectPtr DestinationObjectPtr of the object described by the forwardedHeader
 	 */ 
-	MMINLINE void depthCopyHotFields(MM_EnvironmentStandard *env, MM_ForwardedHeader* forwardedHeader, omrobjectptr_t destinationObjectPtr);
+	void depthCopyHotFields(MM_EnvironmentStandard *env, MM_ForwardedHeader* forwardedHeader, omrobjectptr_t destinationObjectPtr);
 	
 	/* Copy the the hot field of an object.
 	 * Valid if scavenger dynamicBreadthScanOrdering is enabled.
 	 * @param destinationObjectPtr The object who's hot field will be copied
 	 * @param offset The object field offset of the hot field to be copied
 	 */ 
-	MMINLINE void copyHotField(MM_EnvironmentStandard *env, omrobjectptr_t destinationObjectPtr, uint8_t offset);
+	void copyHotField(MM_EnvironmentStandard *env, omrobjectptr_t destinationObjectPtr, uint8_t offset);
 
-	MMINLINE void updateCopyScanCounts(MM_EnvironmentBase* env, uint64_t slotsScanned, uint64_t slotsCopied);
+	void updateCopyScanCounts(MM_EnvironmentBase* env, uint64_t slotsScanned, uint64_t slotsCopied);
 	bool splitIndexableObjectScanner(MM_EnvironmentStandard *env, GC_ObjectScanner *objectScanner, uintptr_t startIndex, omrobjectptr_t *rememberedSetSlot);
 
 	/**
@@ -312,8 +313,8 @@ public:
 	 * @param flags A bit map of GC_ObjectScanner::InstanceFlags.
 	 * @return Whether or not objectPtr should be remembered.
 	 */
-	MMINLINE bool scavengeObjectSlots(MM_EnvironmentStandard *env, MM_CopyScanCacheStandard *scanCache, omrobjectptr_t objectPtr, uintptr_t flags, omrobjectptr_t *rememberedSetSlot);
-	MMINLINE MM_CopyScanCacheStandard *incrementalScavengeObjectSlots(MM_EnvironmentStandard *env, omrobjectptr_t objectPtr, MM_CopyScanCacheStandard* scanCache);	
+	bool scavengeObjectSlots(MM_EnvironmentStandard *env, MM_CopyScanCacheStandard *scanCache, omrobjectptr_t objectPtr, uintptr_t flags, omrobjectptr_t *rememberedSetSlot);
+	MM_CopyScanCacheStandard *incrementalScavengeObjectSlots(MM_EnvironmentStandard *env, omrobjectptr_t objectPtr, MM_CopyScanCacheStandard* scanCache);
 	
 	/**
 	 * For fast traversal of deep structure nodes - scan objects with self referencing fields with priority
@@ -324,7 +325,7 @@ public:
 	 * @param priorityFieldOffset2 Offset to the second priority field, if it can't follow through in one direction, 
 	 * it will attempt to use the second self referencing field 
 	 */
-	MMINLINE void
+	void
 	deepScan(MM_EnvironmentStandard *env, omrobjectptr_t objectPtr, uintptr_t priorityFieldOffset1, uintptr_t priorityFieldOffset2)
 	{
 		/**
@@ -342,7 +343,7 @@ public:
 	 * @param objectPtr The pointer to the object.
 	 * @return True If deep scan should start
 	 */
-	MMINLINE bool
+	bool
 	shouldStartDeepScan(MM_EnvironmentStandard *env, omrobjectptr_t objectPtr)
 	{
 		/* Check last few LSB of the object address for probability 1/16 */
@@ -351,10 +352,10 @@ public:
 
 	void deepScanOutline(MM_EnvironmentStandard *env, omrobjectptr_t objectPtr, uintptr_t priorityFieldOffset1, uintptr_t priorityFieldOffset2);
 
-	MMINLINE bool scavengeRememberedObject(MM_EnvironmentStandard *env, omrobjectptr_t objectPtr);
+	bool scavengeRememberedObject(MM_EnvironmentStandard *env, omrobjectptr_t objectPtr);
 	void scavengeRememberedSetList(MM_EnvironmentStandard *env);
 	void scavengeRememberedSetOverflow(MM_EnvironmentStandard *env);
-	MMINLINE void flushRememberedSet(MM_EnvironmentStandard *env);
+	void flushRememberedSet(MM_EnvironmentStandard *env);
 	void pruneRememberedSetList(MM_EnvironmentStandard *env);
 	void pruneRememberedSetOverflow(MM_EnvironmentStandard *env);
 
@@ -381,7 +382,7 @@ public:
 	void fixupNurserySlots(MM_EnvironmentStandard *env);
 	void fixupObjectScan(MM_EnvironmentStandard *env, omrobjectptr_t objectPtr);
 	bool fixupSlot(omrobjectptr_t *slotPtr);
-	MMINLINE bool fixupSlot(GC_SlotObject *slotObject)
+	bool fixupSlot(GC_SlotObject *slotObject)
 	{
 		omrobjectptr_t objectPtr = slotObject->readReferenceFromSlot();
 		if (fixupSlot(&objectPtr)) {
@@ -395,12 +396,12 @@ public:
 	void scavengeRememberedSetListIndirect(MM_EnvironmentStandard *env);
 	void scavengeRememberedSetListDirect(MM_EnvironmentStandard *env);
 
-	MMINLINE void flushInactiveSurvivorCopyScanCache(MM_EnvironmentStandard *currentEnv, MM_EnvironmentStandard *targetEnv, bool flushCaches, bool final);
-	MMINLINE void deactivateSurvivorCopyScanCache(MM_EnvironmentStandard *currentEnv, MM_EnvironmentStandard *targetEnv, bool flushCaches, bool final);
-	MMINLINE void flushInactiveTenureCopyScanCache(MM_EnvironmentStandard *currentEnv, MM_EnvironmentStandard *targetEnv, bool flushCaches, bool final);
-	MMINLINE void deactivateTenureCopyScanCache(MM_EnvironmentStandard *currentEnv, MM_EnvironmentStandard *targetEnv, bool flushCaches, bool final);
-	MMINLINE void flushInactiveDeferredCopyScanCache(MM_EnvironmentStandard *currentEnv, MM_EnvironmentStandard *targetEnv, bool flushCaches, bool final);
-	MMINLINE void deactivateDeferredCopyScanCache(MM_EnvironmentStandard *currentEnv, MM_EnvironmentStandard *targetEnv, bool flushCaches, bool final);
+	void flushInactiveSurvivorCopyScanCache(MM_EnvironmentStandard *currentEnv, MM_EnvironmentStandard *targetEnv, bool flushCaches, bool final);
+	void deactivateSurvivorCopyScanCache(MM_EnvironmentStandard *currentEnv, MM_EnvironmentStandard *targetEnv, bool flushCaches, bool final);
+	void flushInactiveTenureCopyScanCache(MM_EnvironmentStandard *currentEnv, MM_EnvironmentStandard *targetEnv, bool flushCaches, bool final);
+	void deactivateTenureCopyScanCache(MM_EnvironmentStandard *currentEnv, MM_EnvironmentStandard *targetEnv, bool flushCaches, bool final);
+	void flushInactiveDeferredCopyScanCache(MM_EnvironmentStandard *currentEnv, MM_EnvironmentStandard *targetEnv, bool flushCaches, bool final);
+	void deactivateDeferredCopyScanCache(MM_EnvironmentStandard *currentEnv, MM_EnvironmentStandard *targetEnv, bool flushCaches, bool final);
 #endif /* OMR_GC_CONCURRENT_SCAVENGER */
 
 	/**
@@ -414,22 +415,22 @@ public:
 	void reportGCCycleEnd(MM_EnvironmentStandard *env);
 	void reportGCCycleFinalIncrementEnding(MM_EnvironmentStandard *envModron);
 
-	MMINLINE void clearExpandFailedFlag() { _expandFailed = false; };
-	MMINLINE void setExpandFailedFlag() { _expandFailed = true; };
-	MMINLINE bool expandFailed() { return _expandFailed; };
+	void clearExpandFailedFlag() { _expandFailed = false; };
+	void setExpandFailedFlag() { _expandFailed = true; };
+	bool expandFailed() { return _expandFailed; };
 
-	MMINLINE void clearFailedTenureThresholdFlag() { _failedTenureThresholdReached = false; };
-	MMINLINE void setFailedTenureThresholdFlag() { _failedTenureThresholdReached = true; };
-	MMINLINE void setFailedTenureLargestObject(uintptr_t size) { _failedTenureLargestObject = size; };
-	MMINLINE uintptr_t getFailedTenureLargestObject() { return _failedTenureLargestObject; };
-	MMINLINE bool failedTenureThresholdReached() { return _failedTenureThresholdReached; };
+	void clearFailedTenureThresholdFlag() { _failedTenureThresholdReached = false; };
+	void setFailedTenureThresholdFlag() { _failedTenureThresholdReached = true; };
+	void setFailedTenureLargestObject(uintptr_t size) { _failedTenureLargestObject = size; };
+	uintptr_t getFailedTenureLargestObject() { return _failedTenureLargestObject; };
+	bool failedTenureThresholdReached() { return _failedTenureThresholdReached; };
 
 	void completeScanCache(MM_EnvironmentStandard *env, MM_CopyScanCacheStandard* scanCache);
 	void incrementalScanCacheBySlot(MM_EnvironmentStandard *env, MM_CopyScanCacheStandard* scanCache);
 
-	MMINLINE MM_CopyScanCacheStandard *aliasToCopyCache(MM_EnvironmentStandard *env, GC_SlotObject *scannedSlot, MM_CopyScanCacheStandard* scanCache, MM_CopyScanCacheStandard* copyCache);
-	MMINLINE uintptr_t scanCacheDistanceMetric(MM_CopyScanCacheStandard* cache, GC_SlotObject *scanSlot);
-	MMINLINE uintptr_t copyCacheDistanceMetric(MM_CopyScanCacheStandard* cache);
+	MM_CopyScanCacheStandard *aliasToCopyCache(MM_EnvironmentStandard *env, GC_SlotObject *scannedSlot, MM_CopyScanCacheStandard* scanCache, MM_CopyScanCacheStandard* copyCache);
+	uintptr_t scanCacheDistanceMetric(MM_CopyScanCacheStandard* cache, GC_SlotObject *scanSlot);
+	uintptr_t copyCacheDistanceMetric(MM_CopyScanCacheStandard* cache);
 
 
 	/**
@@ -438,7 +439,7 @@ public:
 	 * @param env - current thread environment
 	 * @return scan cache or null
 	 */
-	MMINLINE MM_CopyScanCacheStandard *getNextScanCacheFromThread(MM_EnvironmentStandard *env);
+	MM_CopyScanCacheStandard *getNextScanCacheFromThread(MM_EnvironmentStandard *env);
 	/**
 	 * Try to get a scan cache from the global scan cache list. It's potentially blocking, if the list is empty.
 	 * Hence, not to be used by mutators, but only by dedicated GC threads.
@@ -448,7 +449,7 @@ public:
 	 * @param env - current thread environment
 	 * @return scan cache or null
 	 */
-	MMINLINE MM_CopyScanCacheStandard *getNextScanCacheFromList(MM_EnvironmentStandard *env);
+	MM_CopyScanCacheStandard *getNextScanCacheFromList(MM_EnvironmentStandard *env);
 
 	/**
 	 * Called at the end of a task to return empty caches to the global free pool
@@ -458,15 +459,15 @@ public:
 	 * Used by CS to return empty caches during intermediate blocks, to aid with more precise counting of free/empty cache in the pool
 	 */
 	void returnEmptyCopyCachesToFreeList(MM_EnvironmentStandard *env);
-	MMINLINE void addCacheEntryToScanListAndNotify(MM_EnvironmentStandard *env, MM_CopyScanCacheStandard *newCacheEntry);
+	void addCacheEntryToScanListAndNotify(MM_EnvironmentStandard *env, MM_CopyScanCacheStandard *newCacheEntry);
 
-	MMINLINE bool
+	bool
 	isWorkAvailableInCacheWithCheck(MM_CopyScanCacheStandard *cache)
 	{
 		return ((NULL != cache) && cache->isScanWorkAvailable());
 	}
 
-	MMINLINE bool
+	bool
 	isEmptyCacheWithCheck(MM_CopyScanCacheStandard *cache)
 	{
 		return ((NULL != cache) && !cache->isScanWorkAvailable());
@@ -477,7 +478,7 @@ public:
 	 * @param env - current thread environment
 	 * @return pointer to scan cache header or NULL if attempt fail
 	 */
-	MMINLINE MM_CopyScanCacheStandard *getFreeCache(MM_EnvironmentStandard *env);
+	MM_CopyScanCacheStandard *getFreeCache(MM_EnvironmentStandard *env);
 
 	/**
 	 * An attempt to create chunk of scan cache headers in heap
@@ -518,8 +519,8 @@ public:
 	void abandonSurvivorTLHRemainder(MM_EnvironmentStandard *env);
 	void abandonTenureTLHRemainder(MM_EnvironmentStandard *env, bool preserveRemainders = false);
 	
-	MMINLINE bool activateSurvivorCopyScanCache(MM_EnvironmentStandard *env);
-	MMINLINE bool activateTenureCopyScanCache(MM_EnvironmentStandard *env);
+	bool activateSurvivorCopyScanCache(MM_EnvironmentStandard *env);
+	bool activateTenureCopyScanCache(MM_EnvironmentStandard *env);
 	void activateDeferredCopyScanCache(MM_EnvironmentStandard *env);
 
 	void reportGCStart(MM_EnvironmentStandard *env);
@@ -548,9 +549,9 @@ public:
 
 	void clearRememberedSetLists(MM_EnvironmentStandard *env);
 
-	MMINLINE bool isRememberedSetInOverflowState() { return _extensions->isScavengerRememberedSetInOverflowState(); }
-	MMINLINE void setRememberedSetOverflowState() { _extensions->setScavengerRememberedSetOverflowState(); }
-	MMINLINE void clearRememberedSetOverflowState() { _extensions->clearScavengerRememberedSetOverflowState(); }
+	bool isRememberedSetInOverflowState() { return _extensions->isScavengerRememberedSetInOverflowState(); }
+	void setRememberedSetOverflowState() { _extensions->setScavengerRememberedSetOverflowState(); }
+	void clearRememberedSetOverflowState() { _extensions->clearScavengerRememberedSetOverflowState(); }
 
 	/* Auto-remember stack objects so JIT can omit generational barriers */
 	void rescanThreadSlots(MM_EnvironmentStandard *env);
@@ -633,7 +634,7 @@ public:
 	bool scavengeCompletedSuccessfully(MM_EnvironmentStandard *env);
 	virtual	void mainThreadGarbageCollect(MM_EnvironmentBase *env, MM_AllocateDescription *allocDescription, bool initMarkMap = false, bool rebuildMarkBits = false);
 
-	MMINLINE uintptr_t
+	uintptr_t
 	isTiltedScavenge()
 	{
 		return _extensions->tiltedScavenge ? 1 : 0;
@@ -844,44 +845,44 @@ public:
 	 * Determine whether the object pointer is found within the heap proper.
 	 * @return Boolean indicating if the object pointer is within the heap boundaries.
 	 */
-	MMINLINE bool
+	bool
 	isHeapObject(omrobjectptr_t objectPtr)
 	{
 		return ((_heapBase <= (uint8_t *)objectPtr) && (_heapTop > (uint8_t *)objectPtr));
 	}
 
-	MMINLINE bool
+	bool
 	isObjectInNewSpace(omrobjectptr_t objectPtr)
 	{
 		return ((void *)objectPtr >= _survivorSpaceBase) && ((void *)objectPtr < _survivorSpaceTop);
 	}
 
-	MMINLINE bool
+	bool
 	isObjectInEvacuateMemory(omrobjectptr_t objectPtr)
 	{
 		/* check if the object in cached allocate (from GC perspective, evacuate) ranges */
 		return ((void *)objectPtr >= _evacuateSpaceBase) && ((void *)objectPtr < _evacuateSpaceTop);
 	}
 	
-	MMINLINE void *
+	void *
 	getEvacuateBase()
 	{
 		return _evacuateSpaceBase;
 	}
 	
-	MMINLINE void *
+	void *
 	getEvacuateTop()
 	{
 		return _evacuateSpaceTop;
 	}
 	
-	MMINLINE void *
+	void *
 	getSurvivorBase()
 	{
 		return _survivorSpaceBase;
 	}
 	
-	MMINLINE void *
+	void *
 	getSurvivorTop()
 	{
 		return _survivorSpaceTop;
@@ -915,7 +916,27 @@ public:
 	 */
 	bool copyObjectSlot(MM_EnvironmentStandard *env, volatile omrobjectptr_t *slotPtr);
 	bool copyObjectSlot(MM_EnvironmentStandard *env, GC_SlotObject* slotObject);
-	omrobjectptr_t copyObject(MM_EnvironmentStandard *env, MM_ForwardedHeader* forwardedHeader);
+
+
+	bool copyObjectSlotInline(MM_EnvironmentStandard *env, volatile omrobjectptr_t *slotPtr)
+	{
+		if (IS_CONCURRENT_ENABLED) {
+			return copyAndForward<CS>(env, slotPtr);
+		} else {
+			return copyAndForward<STW>(env, slotPtr);
+		}
+	}
+
+	bool copyObjectSlotInline(MM_EnvironmentStandard *env, GC_SlotObject *slotObject)
+	{
+		if (IS_CONCURRENT_ENABLED) {
+			return copyAndForward<CS>(env, slotObject);
+		} else {
+			return copyAndForward<STW>(env, slotObject);
+		}
+	}
+
+	omrobjectptr_t copyObject(MM_EnvironmentStandard *env, MM_ForwardedHeader *forwardedHeader);
 
 	/**
 	 * Update the given slot to point at the new location of the object, after copying

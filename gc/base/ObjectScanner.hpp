@@ -168,38 +168,38 @@ public:
 	 *
 	 * @return a pointer to a slot object encapsulating the next object slot, or NULL if no next object slot
 	 */
-	MMINLINE GC_SlotObject *
-	getNextSlot()
-	{
-		bool const compressed = compressObjectReferences();
-		while (NULL != _scanPtr) {
-			/* while there is at least one bit-mapped slot, advance scan ptr to a non-NULL slot or end of map */
-			while ((0 != _scanMap) && ((0 == (1 & _scanMap)) || (0 == GC_SlotObject::readSlot(_scanPtr, compressed)))) {
-				_scanPtr = GC_SlotObject::addToSlotAddress(_scanPtr, 1, compressed);
-				_scanMap >>= 1;
-			}
-			if (0 != _scanMap) {
-				/* set up to return slot object for non-NULL slot at scan ptr and advance scan ptr */
-				_slotObject.writeAddressToSlot(_scanPtr);
-				_scanPtr = GC_SlotObject::addToSlotAddress(_scanPtr, 1, compressed);
-				_scanMap >>= 1;
-				return &_slotObject;
-			}
-
-			/* slot bit map is empty -- try to refresh it */
-			if (hasMoreSlots()) {
-				bool hasNextSlotMap;
-				_scanPtr = getNextSlotMap(&_scanMap, &hasNextSlotMap);
-				if (!hasNextSlotMap) {
-					setNoMoreSlots();
-				}
-			} else {
-				_scanPtr = NULL;
-			}
-		}
-
-		return NULL;
-	}
+	GC_SlotObject *
+	getNextSlot();
+//	{
+//		bool const compressed = compressObjectReferences();
+//		while (NULL != _scanPtr) {
+//			/* while there is at least one bit-mapped slot, advance scan ptr to a non-NULL slot or end of map */
+//			while ((0 != _scanMap) && ((0 == (1 & _scanMap)) || (0 == GC_SlotObject::readSlot(_scanPtr, compressed)))) {
+//				_scanPtr = GC_SlotObject::addToSlotAddress(_scanPtr, 1, compressed);
+//				_scanMap >>= 1;
+//			}
+//			if (0 != _scanMap) {
+//				/* set up to return slot object for non-NULL slot at scan ptr and advance scan ptr */
+//				_slotObject.writeAddressToSlot(_scanPtr);
+//				_scanPtr = GC_SlotObject::addToSlotAddress(_scanPtr, 1, compressed);
+//				_scanMap >>= 1;
+//				return &_slotObject;
+//			}
+//
+//			/* slot bit map is empty -- try to refresh it */
+//			if (hasMoreSlots()) {
+//				bool hasNextSlotMap;
+//				_scanPtr = getNextSlotMap(&_scanMap, &hasNextSlotMap);
+//				if (!hasNextSlotMap) {
+//					setNoMoreSlots();
+//				}
+//			} else {
+//				_scanPtr = NULL;
+//			}
+//		}
+//
+//		return NULL;
+//	}
 
 	/**
 	 * The object scanner leaf optimization option is enabled by the OMR_GC_LEAF_BITS

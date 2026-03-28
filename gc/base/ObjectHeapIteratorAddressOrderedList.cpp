@@ -127,6 +127,21 @@ GC_ObjectHeapIteratorAddressOrderedList::nextObjectNoAdvance() {
 	return NULL;
 }
 
+omrobjectptr_t
+GC_ObjectHeapIteratorAddressOrderedList::nextObjectNoAdvanceFast() {
+	omrobjectptr_t returnValue = _scanPtr;
+
+	omrobjectptr_t nextScanPtr = (omrobjectptr_t) ( ((uintptr_t)_scanPtr) + _extensions->objectModel.getConsumedSizeInBytesWithHeader(_scanPtr) );
+
+	if (_scanPtr < _scanPtrTop) {
+		_scanPtr = nextScanPtr;
+	} else {
+		_scanPtr = NULL;
+	}
+
+	return returnValue;
+}
+
 /**
  * @see GC_ObjectHeapIterator::advance()
  */
