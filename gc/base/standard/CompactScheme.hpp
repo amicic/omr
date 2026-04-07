@@ -216,7 +216,7 @@ protected:
 	 * @param[in/out] objectCount the number of objects fixed up (accumulated)
 	 */
 	void fixupSubArea(MM_EnvironmentStandard *env, omrobjectptr_t firstObject, omrobjectptr_t finish,  bool markedOnly, uintptr_t& objectCount);
-	void fixupObjects(MM_EnvironmentStandard *env, uintptr_t& objectCount);
+	void fixupObjects(MM_EnvironmentStandard *env, uintptr_t& objectCount, bool nurseryOnly);
 
 	void rebuildFreelist(MM_EnvironmentStandard *env, bool nurseryOnly);
 

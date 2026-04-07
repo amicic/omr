@@ -604,7 +604,7 @@ MM_CompactScheme::compact(MM_EnvironmentBase *envBase, bool rebuildMarkBits, boo
 
 		env->_compactStats._fixupStartTime = omrtime_hires_clock();
 
-		fixupObjects(env, fixupObjectsCount);
+		fixupObjects(env, fixupObjectsCount, nurseryOnly);
 
 
 		env->_compactStats._fixupEndTime = omrtime_hires_clock();
@@ -616,6 +616,7 @@ MM_CompactScheme::compact(MM_EnvironmentBase *envBase, bool rebuildMarkBits, boo
 
 	/* FixupRoots can always be done in parallel */
 	env->_compactStats._rootFixupStartTime = omrtime_hires_clock();
+	// TODO: use this to fixup tenure
 	_delegate.fixupRoots(env, this);
 	env->_compactStats._rootFixupEndTime = omrtime_hires_clock();
 
@@ -1367,12 +1368,15 @@ MM_CompactScheme::getForwardingPtr(omrobjectptr_t objectPtr) const
 }
 
 void
-MM_CompactScheme::fixupObjects(MM_EnvironmentStandard *env, uintptr_t& objectCount)
+MM_CompactScheme::fixupObjects(MM_EnvironmentStandard *env, uintptr_t& objectCount, bool nurseryOnly)
 {
+	// DEV: make this skip fixing up tenure. We will handle it in fixupRoots instead
 	MM_HeapRegionManager *regionManager = _heap->getHeapRegionManager();
 	GC_HeapRegionIteratorStandard regionIterator(regionManager);
 	MM_HeapRegionDescriptorStandard *region = NULL;
 	SubAreaEntry *subAreaTable = _subAreaTable;
+
+	OMRPORT_ACCESS_FROM_OMRPORT(env->getPortLibrary());
 
 	while (NULL != (region = regionIterator.nextRegion())) {
 		if (!region->isCommitted() || (0 == region->getSize())) {
@@ -1380,6 +1384,14 @@ MM_CompactScheme::fixupObjects(MM_EnvironmentStandard *env, uintptr_t& objectCou
 		}
 		intptr_t i;
         for (i = 0; subAreaTable[i].state != SubAreaEntry::end_segment; i++) {
+			// DEV: add a skip in the loop so that i still iterates. Might be a better way to do this
+			if (nurseryOnly && MEMORY_TYPE_OLD == region->getSubSpace()->getTypeFlags())
+			{
+				omrtty_printf("SHADMAN fixupObjects Found tenure workerId=%2zu i=%zu\n", env->getWorkerID(), i);
+				continue;
+			}
+			omrtty_printf("SHADMAN fixupObjects Nursery workerId=%2zu i=%zu\n", env->getWorkerID(), i);
+
         	if (changeSubAreaAction(env, &subAreaTable[i], SubAreaEntry::fixing_up)) {
         		fixupSubArea(env, subAreaTable[i].firstObject, subAreaTable[i+1].firstObject, subAreaTable[i].state == SubAreaEntry::fixup_only, objectCount);
 			}
@@ -1388,6 +1400,7 @@ MM_CompactScheme::fixupObjects(MM_EnvironmentStandard *env, uintptr_t& objectCou
          * the end_segment region, is i+1 */
         subAreaTable += (i+1);
 	}
+	omrtty_printf("SHADMAN fixupObjects DONE\n");
 }
 
 void
@@ -1405,6 +1418,7 @@ MM_CompactScheme::fixupSubArea(MM_EnvironmentStandard *env, omrobjectptr_t first
 		return;
 	}
 
+	// TODO: we need this object in fixupRoots
 	MM_CompactSchemeFixupObject fixupObject(env, this);
 
 	if (markedOnly) {
