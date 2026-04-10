@@ -616,7 +616,6 @@ MM_CompactScheme::compact(MM_EnvironmentBase *envBase, bool rebuildMarkBits, boo
 
 	/* FixupRoots can always be done in parallel */
 	env->_compactStats._rootFixupStartTime = omrtime_hires_clock();
-	// TODO: use this to fixup tenure
 	_delegate.fixupRoots(env, this);
 	env->_compactStats._rootFixupEndTime = omrtime_hires_clock();
 
