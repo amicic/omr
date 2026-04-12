@@ -632,7 +632,7 @@ MM_PhysicalSubArenaVirtualMemorySemiSpace::contract(MM_EnvironmentBase *env, uin
 			/* Now that the memory has been moved fix up the roots */
 			MM_ContractSlotScanner contractSlotScanner(env, (void *)allocateLeadingFreeTop, (void *)(((uintptr_t)allocateLeadingFreeTop) + heapSizeToMove), (void *)allocateSegmentBase);
 			contractSlotScanner.setIncludeStackFrameClassReferences(false);
-			contractSlotScanner.scanAllSlots(env, NULL);
+			contractSlotScanner.scanAllSlots(env);
 
 			/* Adjust the used heap ranges */
 			allocateSpaceUsedHeapTop = ((uint8_t *)allocateSegmentBase) + heapSizeToMove;
@@ -813,7 +813,7 @@ MM_PhysicalSubArenaVirtualMemorySemiSpace::contract(MM_EnvironmentBase *env, uin
 			/* Now that the memory has been moved fix up the roots */
 			MM_ContractSlotScanner contractSlotScanner(env, (void *)allocateLeadingFreeTop, (void *)(((uintptr_t)allocateLeadingFreeTop) + heapSizeToMove), (void *)allocateSegmentBase);
 			contractSlotScanner.setIncludeStackFrameClassReferences(false);
-			contractSlotScanner.scanAllSlots(env, NULL);
+			contractSlotScanner.scanAllSlots(env);
 
 			/* Adjust the used heap ranges */
 			allocateSpaceUsedHeapTop = ((uint8_t *)allocateSegmentBase) + heapSizeToMove;
