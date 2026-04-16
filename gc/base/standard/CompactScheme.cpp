@@ -558,7 +558,7 @@ MM_CompactScheme::compact(MM_EnvironmentBase *envBase, bool rebuildMarkBits, boo
 	uintptr_t skippedObjectCount = 0;
 	uintptr_t fixupObjectsCount = 0;
 	bool singleThreaded = false;
-
+	omrtty_printf("SHADMAN compact start workerId=%2zu\n", env->getWorkerID());
 	if (env->_currentTask->synchronizeGCThreadsAndReleaseMain(env, UNIQUE_ID)) {
 		/* Do any necessary initialization */
 		/* TODO: Perhaps the task dispatch should occur internally within so that the initialization doesn't need to be
@@ -594,6 +594,7 @@ MM_CompactScheme::compact(MM_EnvironmentBase *envBase, bool rebuildMarkBits, boo
 	 */
 	if (!singleThreaded || env->_currentTask->synchronizeGCThreadsAndReleaseMain(env, UNIQUE_ID)) {
 		env->_compactStats._moveStartTime = omrtime_hires_clock();
+		omrtty_printf("SHADMAN compact move workerId=%2zu\n", env->getWorkerID());
 		moveObjects(env, objectCount, byteCount, skippedObjectCount);
 		env->_compactStats._moveEndTime = omrtime_hires_clock();
 
@@ -604,6 +605,7 @@ MM_CompactScheme::compact(MM_EnvironmentBase *envBase, bool rebuildMarkBits, boo
 
 		env->_compactStats._fixupStartTime = omrtime_hires_clock();
 
+		omrtty_printf("SHADMAN compact fixupObjects workerId=%2zu\n", env->getWorkerID());
 		fixupObjects(env, fixupObjectsCount, nurseryOnly);
 
 
@@ -616,6 +618,7 @@ MM_CompactScheme::compact(MM_EnvironmentBase *envBase, bool rebuildMarkBits, boo
 
 	/* FixupRoots can always be done in parallel */
 	env->_compactStats._rootFixupStartTime = omrtime_hires_clock();
+	omrtty_printf("SHADMAN compact fixupRoots workerId=%2zu\n", env->getWorkerID());
 	_delegate.fixupRoots(env, this, nurseryOnly);
 	env->_compactStats._rootFixupEndTime = omrtime_hires_clock();
 
@@ -648,6 +651,7 @@ MM_CompactScheme::compact(MM_EnvironmentBase *envBase, bool rebuildMarkBits, boo
 	env->_compactStats._movedObjects = objectCount;
 	env->_compactStats._movedBytes = byteCount;
 	env->_compactStats._fixupObjects = fixupObjectsCount;
+	omrtty_printf("SHADMAN compact completed workerId=%2zu\n", env->getWorkerID());
 }
 
 void
