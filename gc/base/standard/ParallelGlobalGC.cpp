@@ -546,19 +546,26 @@ MM_ParallelGlobalGC::mainThreadGarbageCollect(MM_EnvironmentBase *env, MM_Alloca
 	 * fix the heap so that it can be walked
 	 */
 	if (_delegate.isAllowUserHeapWalk() || gcCode.isRASDumpGC() || gcCode.shouldClearHeap()) {
+		OMRPORT_ACCESS_FROM_OMRPORT(env->getPortLibrary());
+		omrtty_printf("SHADMAN need fixHeapForWalk\n");
 		if (!_fixHeapForWalkCompleted) {
 #if defined(OMR_GC_MODRON_COMPACTION)
 			if (compactedThisCycle) {
+				omrtty_printf("SHADMAN compact fixHeapForWalk\n");
 				getCompactScheme(env)->fixHeapForWalk(env, MEMORY_TYPE_RAM, FIXUP_DEBUG_TOOLING);
 			} else
 #endif /* OMR_GC_MODRON_COMPACTION */
 			{
+				omrtty_printf("SHADMAN global fixHeapForWalk\n");
 				fixHeapForWalk(env, MEMORY_TYPE_RAM, FIXUP_DEBUG_TOOLING, fixObject);
 			}
 			/* since this is the superset of all walk operations, we can safely set the flag that states other walks
 			 * can be omitted for this cycle as redundant (CMVC 122959)
 			 */
 			_fixHeapForWalkCompleted = true;
+		}
+		else{
+			omrtty_printf("SHADMAN fixHeapForWalk already completed");
 		}
 	}
 

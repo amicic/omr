@@ -1500,6 +1500,7 @@ MM_CompactScheme::fixHeapForWalk(MM_EnvironmentBase *env, uintptr_t walkFlags, u
 	Trc_MM_DoFixHeapForCompact_Entry(env->getLanguageVMThread(), walkFlags, walkReason);
 
 	OMRPORT_ACCESS_FROM_ENVIRONMENT(env);
+	omrtty_printf("SHADMAN MM_CompactScheme::fixHeapForWalk\n");
 	uint64_t startTime = omrtime_hires_clock();
 
 	MM_CompactFixHeapForWalkTask fixHeapForWalkTask(env, _dispatcher, this);
@@ -1519,6 +1520,8 @@ MM_CompactScheme::parallelFixHeapForWalk(MM_EnvironmentBase *env)
 	MM_HeapRegionDescriptorStandard *region = NULL;
 	SubAreaEntry *subAreaTable = _subAreaTable;
 
+	OMRPORT_ACCESS_FROM_ENVIRONMENT(env);
+	omrtty_printf("SHADMAN MM_CompactScheme::parallelFixHeapForWalk threadId=%2zu\n", env->getWorkerID());
 	while(NULL != (region = regionIterator.nextRegion())) {
 		if (!region->isCommitted() || (0 == region->getSize())) {
 			continue;
@@ -1529,6 +1532,7 @@ MM_CompactScheme::parallelFixHeapForWalk(MM_EnvironmentBase *env)
         	if (subAreaTable[i].state == SubAreaEntry::fixup_only) {
 	        	if (changeSubAreaAction(env, &subAreaTable[i], SubAreaEntry::fixing_heap_for_walk)) {
 	        		omrobjectptr_t start = subAreaTable[i].firstObject;
+					omrtty_printf("SHADMAN parallelFixHeapForWalk threadId=%2zu memType=%zu i=%3zu firstObj=%p\n",env->getWorkerID(), region->getTypeFlags(), i, start);
 					omrobjectptr_t end   = subAreaTable[i].firstObject;
 					omrobjectptr_t alignedEnd = pageStart(pageIndex(end));
 
@@ -1549,6 +1553,7 @@ MM_CompactScheme::parallelFixHeapForWalk(MM_EnvironmentBase *env)
          * the end_segment region, is i+1 */
         subAreaTable += i + 1;
 	}
+	omrtty_printf("SHADMAN parallelFixHeapForWalk completed threadId=%2zu\n", env->getWorkerID());
 }
 
 bool
