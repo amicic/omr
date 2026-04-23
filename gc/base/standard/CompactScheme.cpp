@@ -1536,18 +1536,25 @@ MM_CompactScheme::parallelFixHeapForWalk(MM_EnvironmentBase *env)
         	if (subAreaTable[i].state == SubAreaEntry::fixup_only) {
 	        	if (changeSubAreaAction(env, &subAreaTable[i], SubAreaEntry::fixing_heap_for_walk)) {
 	        		omrobjectptr_t start = subAreaTable[i].firstObject;
-					omrtty_printf("SHADMAN parallelFixHeapForWalk threadId=%2zu memType=%zu i=%3zu firstObj=%p\n",env->getWorkerID(), region->getTypeFlags(), i, start);
-					omrobjectptr_t end   = subAreaTable[i].firstObject;
+					omrobjectptr_t end   = subAreaTable[i + 1].firstObject;
+					omrtty_printf("SHADMAN parallelFixHeapForWalk threadId=%2zu memType=%zu i=%3zu start=%p end=%p\n",env->getWorkerID(), region->getTypeFlags(), i, start, end);
+
 					omrobjectptr_t alignedEnd = pageStart(pageIndex(end));
 
 					GC_ObjectHeapIteratorAddressOrderedList objectIterator(_extensions, start, end, false);
 					omrobjectptr_t objectPtr = NULL;
 					while (NULL != (objectPtr = objectIterator.nextObject())) {
+//						if (i < 1) {
+//							omrtty_printf("parallelFixHeapForWalk threadId=%2zu objectPtr %p\n",env->getWorkerID(), objectPtr);
+//						}
 						if (objectPtr >= alignedEnd || !_markMap->isBitSet(objectPtr)) {
 							/* this is a hole that looks like an object and should be made to look like a hole */
 							uintptr_t deadObjectByteSize = _extensions->objectModel.getConsumedSizeInBytesWithHeader(objectPtr);
 							memorySubSpace->abandonHeapChunk(objectPtr, ((uint8_t*)objectPtr) + deadObjectByteSize);
-							_extensions->globalGCStats.fixHeapForWalkObjectCount += 1;
+//							_extensions->globalGCStats.fixHeapForWalkObjectCount += 1;
+//							if (i < 1) {
+//								omrtty_printf("parallelFixHeapForWalk threadId=%2zu objectPtr abandoned %p\n",env->getWorkerID(), objectPtr);
+//							}
 						}
 					}
 				}
