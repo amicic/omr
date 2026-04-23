@@ -552,7 +552,16 @@ MM_ParallelGlobalGC::mainThreadGarbageCollect(MM_EnvironmentBase *env, MM_Alloca
 #if defined(OMR_GC_MODRON_COMPACTION)
 			if (compactedThisCycle) {
 				omrtty_printf("SHADMAN compact fixHeapForWalk\n");
-				getCompactScheme(env)->fixHeapForWalk(env, MEMORY_TYPE_RAM, FIXUP_DEBUG_TOOLING);
+//				MM_CompactStats *compactStats = &_extensions->globalGCStats.compactStats;
+				// i.e. compact nurseryOnly
+//				if (CompactReason::COMPACT_ABORTED_SCAVENGE != compactStats->_compactReason)
+//				{
+					getCompactScheme(env)->fixHeapForWalk(env, MEMORY_TYPE_RAM, FIXUP_DEBUG_TOOLING);
+//				}
+//				else
+//				{
+//					omrtty_printf("SHADMAN compact fixHeapForWalk skipped\n");
+//				}
 			} else
 #endif /* OMR_GC_MODRON_COMPACTION */
 			{
@@ -1248,7 +1257,7 @@ MM_ParallelGlobalGC::processLargeAllocateStatsAfterSweep(MM_EnvironmentBase *env
 	MM_LargeObjectAllocateStats *stats = memoryPool->getLargeObjectAllocateStats();
 	stats->addTimeMergeAverage(omrtime_hires_clock() - startTime);
 
-	stats->verifyFreeEntryCount(memoryPool->getActualFreeEntryCount());
+	stats->verifyFreeEntryCount(env, memoryPool->getActualFreeEntryCount());
 	/* estimate Fragmentation */
 	if ((GLOBALGC_ESTIMATE_FRAGMENTATION == (_extensions->estimateFragmentation & GLOBALGC_ESTIMATE_FRAGMENTATION))
 		&& _extensions->configuration->canCollectFragmentationStats(env)
