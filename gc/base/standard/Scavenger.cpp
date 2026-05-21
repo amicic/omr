@@ -4899,6 +4899,8 @@ MM_Scavenger::internalGarbageCollect(MM_EnvironmentBase *envBase, MM_MemorySubSp
 bool
 MM_Scavenger::percolateGarbageCollect(MM_EnvironmentBase *env,  MM_MemorySubSpace *subSpace, MM_AllocateDescription *allocDescription, PercolateReason percolateReason, uint32_t gcCode)
 {
+	OMRPORT_ACCESS_FROM_OMRPORT(env->getPortLibrary());
+	omrtty_printf("SHADMAN percolateGarbageCollect reason=%zu", percolateReason);
 	/* save the cycle state since we are about to call back into the collector to start a new global cycle */
 	MM_CycleState *scavengeCycleState = env->_cycleState;
 	Assert_MM_true(NULL != scavengeCycleState);
