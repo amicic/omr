@@ -81,9 +81,11 @@ MM_ConfigurationGenerational::initialize(MM_EnvironmentBase* env)
 			/* Scavenge Abort is rather expensive operation. Give some more tenuring headroom with CS,
 			 * to decrease probability of an abort, even if that means slightly more frequent Global GC.
 			 */
-			extensions->concurrentKickoffTenuringHeadroom = 0.10f;
+			//extensions->concurrentKickoffTenuringHeadroom = 0.10f;
+			extensions->concurrentKickoffTenuringHeadroom = 0.0f;
 		} else {
-			extensions->concurrentKickoffTenuringHeadroom = 0.02f;
+			//extensions->concurrentKickoffTenuringHeadroom = 0.02f;
+			extensions->concurrentKickoffTenuringHeadroom = 0.0f;
 		}
 	}
 
