@@ -83,10 +83,7 @@ public:
 	MMINLINE bool concurrentMarkNotStarted() { return (_executionMode == CONCURRENT_OFF); }
 	MMINLINE bool concurrentMarkInProgress() { return (_executionMode > CONCURRENT_OFF); }
 	
-	MMINLINE bool switchExecutionMode(uintptr_t oldMode, uintptr_t newMode)
-	{
-		return oldMode == MM_AtomicOperations::lockCompareExchange(&_executionMode, oldMode, newMode);
-	}
+	bool switchExecutionMode(MM_EnvironmentBase *env, uintptr_t oldMode, uintptr_t newMode);
 	
 	MMINLINE uintptr_t  getExecutionModeAtGC() { return _executionModeAtGC; };
 	MMINLINE void  setExecutionModeAtGC(uintptr_t executionMode) { _executionModeAtGC = executionMode; };
@@ -166,7 +163,7 @@ public:
 	MMINLINE uintptr_t getRSObjectsFound(){ return (uintptr_t) _RSObjectsFound; };
 	
 	MMINLINE uintptr_t getCardCleaningThreshold() { return _cardCleaningThreshold; };
-	MMINLINE void  setCardCleaningThreshold(uintptr_t threshold) { _cardCleaningThreshold= threshold; };
+	MMINLINE void  setCardCleaningThreshold(uintptr_t threshold) { _cardCleaningThreshold = threshold; };
 	MMINLINE uintptr_t getTotalTraced() { return _conHelperTraceSizeCount + _conHelperCardCleanCount + _traceSizeCount + _cardCleanCount; };
 	MMINLINE uintptr_t getMutatorsTraced() { return _traceSizeCount + _cardCleanCount; };
 	MMINLINE uintptr_t getConHelperTraced() { return _conHelperTraceSizeCount + _conHelperCardCleanCount; };

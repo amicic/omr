@@ -317,7 +317,8 @@ protected:
 	void periodicalTuning(MM_EnvironmentBase *env, uintptr_t freeSize);
 
 #if defined(OMR_GC_MODRON_SCAVENGER)
-	uintptr_t potentialFreeSpace(MM_EnvironmentBase *env, MM_AllocateDescription *allocDescription);
+	uintptr_t currentOldFree();
+	uintptr_t potentialFreeSpace(MM_EnvironmentBase *env, MM_AllocateDescription *allocDescription, uintptr_t oldFree);
 #endif /*OMR_GC_MODRON_SCAVENGER */
 
 	void reportConcurrentCompleteTracingStart(MM_EnvironmentBase *env);

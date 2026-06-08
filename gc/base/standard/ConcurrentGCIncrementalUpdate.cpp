@@ -634,7 +634,7 @@ MM_ConcurrentGCIncrementalUpdate::tuneToHeap(MM_EnvironmentBase *env)
 	 * e.g. if kickoffThreshold = 10M, cardCleaningThreshold = 2M and concurrentSlack = 100M
 	 *  1) the boost will be 1M (10% of 10M)
 	 *  2) the kickoff slack will be 100M
-	 *  3) the cardcleaning slack will be 20M (100M * (10M / 2M))
+	 *  3) the cardcleaning slack will be 20M (100M * (2M / 10M))
 	 *  resulting in a final kickoffThreshold = 111M and a cardCleaningThreshold = 23M
 	 */
 	float boost = ((float)kickoffThreshold * CONCURRENT_KICKOFF_THRESHOLD_BOOST) - (float)kickoffThreshold;
@@ -827,7 +827,7 @@ void
 MM_ConcurrentGCIncrementalUpdate::kickoffCardCleaning(MM_EnvironmentBase *env, ConcurrentCardCleaningReason reason)
 {
 	/* Switch to CONCURRENT_CLEAN_TRACE...if we fail someone beat us to it */
-	if (_stats.switchExecutionMode(CONCURRENT_TRACE_ONLY, CONCURRENT_CLEAN_TRACE)) {
+	if (_stats.switchExecutionMode(env, CONCURRENT_TRACE_ONLY, CONCURRENT_CLEAN_TRACE)) {
 		_stats.setCardCleaningReason(reason);
 		_concurrentDelegate.cardCleaningStarted(env);
 	}
@@ -837,7 +837,7 @@ void
 MM_ConcurrentGCIncrementalUpdate::setupForConcurrent(MM_EnvironmentBase *env)
 {
 	_concurrentDelegate.signalThreadsToActivateWriteBarrier(env);
-	_stats.switchExecutionMode(CONCURRENT_INIT_COMPLETE, CONCURRENT_ROOT_TRACING);
+	_stats.switchExecutionMode(env, CONCURRENT_INIT_COMPLETE, CONCURRENT_ROOT_TRACING);
 }
 
 /**
@@ -853,6 +853,8 @@ MM_ConcurrentGCIncrementalUpdate::setupForConcurrent(MM_EnvironmentBase *env)
 uintptr_t
 MM_ConcurrentGCIncrementalUpdate::doConcurrentTrace(MM_EnvironmentBase *env, MM_AllocateDescription *allocDescription, uintptr_t sizeToTrace, MM_MemorySubSpace *subspace, bool threadAtSafePoint)
 {
+	OMRPORT_ACCESS_FROM_ENVIRONMENT(env);
+
 	uintptr_t sizeTraced = 0;
 	uintptr_t sizeTracedPreviously = (uintptr_t)-1;
 	uintptr_t remainingFree = 0;
@@ -860,8 +862,8 @@ MM_ConcurrentGCIncrementalUpdate::doConcurrentTrace(MM_EnvironmentBase *env, MM_
 
 	/* Determine how much "taxable" free space remains to be allocated. */
 #if defined(OMR_GC_MODRON_SCAVENGER)
-	if(_extensions->scavengerEnabled) {
-		remainingFree = MM_ConcurrentGC::potentialFreeSpace(env, allocDescription);
+	if (_extensions->scavengerEnabled) {
+		remainingFree = MM_ConcurrentGC::potentialFreeSpace(env, allocDescription, currentOldFree());
 	} else
 #endif /* OMR_GC_MODRON_SCAVENGER */
 	{
@@ -889,14 +891,17 @@ MM_ConcurrentGCIncrementalUpdate::doConcurrentTrace(MM_EnvironmentBase *env, MM_
 	 * (during tuneToHeap that occurred at the end of last global GC), it needs to be adjusted by
 	 * the difference between actual remainingFree at the time of global kickoff and global kickoff threshold.
 	 */
-	uintptr_t relativeCardCleaningThreshold = _stats.getCardCleaningThreshold();
-	uintptr_t absoluteCardCleaningThreshold = relativeCardCleaningThreshold;
+	uintptr_t initialCardCleaningThreshold = _stats.getCardCleaningThreshold();
+	uintptr_t adjustedCardCleaningThreshold = initialCardCleaningThreshold;
 
 	if (_stats.getRemainingFree() >= _stats.getKickoffThreshold()) {
-		absoluteCardCleaningThreshold += (_stats.getRemainingFree() - _stats.getKickoffThreshold());
+		adjustedCardCleaningThreshold += (_stats.getRemainingFree() - _stats.getKickoffThreshold());
 	}
 
-	if ((CONCURRENT_TRACE_ONLY == _stats.getExecutionMode()) && (remainingFree < absoluteCardCleaningThreshold)) {
+	omrtty_printf("doConcurrentTrace mode %zu remainingFree %zu (via _stats %zu) adjustedCardCleaningThreshold %zu initialCardCleaningThreshold %zu getKickoffThreshold %zu\n",
+			_stats.getExecutionMode(), remainingFree, _stats.getRemainingFree(), adjustedCardCleaningThreshold, initialCardCleaningThreshold, _stats.getKickoffThreshold());
+
+	if ((CONCURRENT_TRACE_ONLY == _stats.getExecutionMode()) && (remainingFree < adjustedCardCleaningThreshold)) {
 		kickoffCardCleaning(env, CARD_CLEANING_THRESHOLD_REACHED);
 	}
 
@@ -1040,13 +1045,18 @@ MM_ConcurrentGCIncrementalUpdate::doConcurrentTrace(MM_EnvironmentBase *env, MM_
 		}
 	} /* of while sizeTraced < sizeToTrace */
 
+	omrtty_printf("doConcurrentTrace mode %zu isGcOccurred %zu isCardCleaningComplete %zu tracingExhausted %zu isConcurrentScanningComplete %zu\n",
+			_stats.getExecutionMode(), (uintptr_t)isGcOccurred, (uintptr_t)((MM_ConcurrentCardTable *)_cardTable)->isCardCleaningComplete(),
+			(uintptr_t)_markingScheme->getWorkPackets()->tracingExhausted(), (uintptr_t)_concurrentDelegate.isConcurrentScanningComplete(env));
+
+
 	if (!isGcOccurred) {
 		/* If no more work left (and concurrent scanning is complete or disabled) then switch to exhausted now */
 		if ((NULL != _cardTable) && ((MM_ConcurrentCardTable *)_cardTable)->isCardCleaningComplete() &&
 			_markingScheme->getWorkPackets()->tracingExhausted() &&
 			_concurrentDelegate.isConcurrentScanningComplete(env)) {
 
-			if(_stats.switchExecutionMode(CONCURRENT_CLEAN_TRACE, CONCURRENT_EXHAUSTED)) {
+			if (_stats.switchExecutionMode(env, CONCURRENT_CLEAN_TRACE, CONCURRENT_EXHAUSTED)) {
 				/* Tell all MSS to use slow path allocate and so get to a safe
 				* point before paying allocation tax.
 				*/

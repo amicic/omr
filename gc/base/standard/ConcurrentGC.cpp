@@ -1092,7 +1092,7 @@ MM_ConcurrentGC::calculateTraceSize(MM_EnvironmentBase *env, MM_AllocateDescript
 	 * based on current amount of "taxable" free space left.
 	 */
 	if (allocDescription->isNurseryAllocation()) {
-		remainingFree = potentialFreeSpace(env, allocDescription);
+		remainingFree = potentialFreeSpace(env, allocDescription, currentOldFree());
 	} else
 #endif /* OMR_GC_MODRON_SCAVENGER */
 	{
@@ -1197,6 +1197,29 @@ MM_ConcurrentGC::periodicalTuningNeeded(MM_EnvironmentBase *env, uintptr_t freeS
 }
 
 #if defined(OMR_GC_MODRON_SCAVENGER)
+uintptr_t
+MM_ConcurrentGC::currentOldFree()
+{
+	MM_MemorySpace *memorySpace = _extensions->heap->getDefaultMemorySpace();
+	MM_MemorySubSpace *oldSubspace = memorySpace->getTenureMemorySubSpace();
+
+	uintptr_t free = 0;
+#if defined(OMR_GC_LARGE_OBJECT_AREA)
+	/* Do we need to tax this allocation ? */
+	if (LOA == _meteringType) {
+		free = oldSubspace->getApproximateActiveFreeLOAMemorySize();
+	} else {
+		Assert_MM_true(SOA == _meteringType);
+		free = oldSubspace->getApproximateActiveFreeMemorySize() - oldSubspace->getApproximateActiveFreeLOAMemorySize();
+	}
+#else /* defined(OMR_GC_LARGE_OBJECT_AREA) */
+	free = oldSubspace->getApproximateActiveFreeMemorySize();
+#endif /* defined(OMR_GC_LARGE_OBJECT_AREA) */
+
+	return free;
+}
+
+
 /**
  * Calculate potential free space.
  * Calculate an estimate of the number of bytes that can be allocated in the
@@ -1205,62 +1228,60 @@ MM_ConcurrentGC::periodicalTuningNeeded(MM_EnvironmentBase *env, uintptr_t freeS
  * @return  Number of bytes available for allocation before old area is exhausted
  */
 uintptr_t
-MM_ConcurrentGC::potentialFreeSpace(MM_EnvironmentBase *env, MM_AllocateDescription *allocDescription)
+MM_ConcurrentGC::potentialFreeSpace(MM_EnvironmentBase *env, MM_AllocateDescription *allocDescription, uintptr_t oldFree)
 {
-	MM_MemorySpace *memorySpace = env->getExtensions()->heap->getDefaultMemorySpace();
-	MM_MemorySubSpace *oldSubspace = memorySpace->getTenureMemorySubSpace();
-	MM_MemorySubSpace *newSubspace = memorySpace->getDefaultMemorySubSpace();
+	OMRPORT_ACCESS_FROM_ENVIRONMENT(env);
 	MM_ScavengerStats *scavengerStats = &_extensions->scavengerStats;
-
-	uintptr_t headRoom = 0;
-	uintptr_t currentOldFree = 0;
 
 	/* Have we done at least 1 scavenge ? If not no statistics available so return high values */
 	if (!scavengerStats->isAvailable(env)) {
 		return (uintptr_t)-1;
 	}
 
+	MM_MemorySpace *memorySpace = env->getExtensions()->heap->getDefaultMemorySpace();
+	MM_MemorySubSpace *newSubspace = memorySpace->getDefaultMemorySubSpace();
+	MM_MemorySubSpace *oldSubspace = memorySpace->getTenureMemorySubSpace();
+	uintptr_t headRoom = 0;
 	uintptr_t nurseryPromotion = (scavengerStats->_avgTenureBytes == 0) ? 1 : (uintptr_t)(scavengerStats->_avgTenureBytes + (env->getExtensions()->tenureBytesDeviationBoost * scavengerStats->_avgTenureBytesDeviation));
 
 #if defined(OMR_GC_LARGE_OBJECT_AREA)
 	/* Do we need to tax this allocation ? */
 	if (LOA == _meteringType) {
 		nurseryPromotion = scavengerStats->_avgTenureLOABytes == 0 ? 1 : scavengerStats->_avgTenureLOABytes;
-		currentOldFree = oldSubspace->getApproximateActiveFreeLOAMemorySize();
 		headRoom = (uintptr_t)(_extensions->concurrentKickoffTenuringHeadroom * _extensions->lastGlobalGCFreeBytesLOA);
 	} else {
 		assume0(SOA == _meteringType);
-		currentOldFree = oldSubspace->getApproximateActiveFreeMemorySize() - oldSubspace->getApproximateActiveFreeLOAMemorySize();
 		headRoom = (uintptr_t)(_extensions->concurrentKickoffTenuringHeadroom * (_extensions->getLastGlobalGCFreeBytes() - _extensions->lastGlobalGCFreeBytesLOA));
 	}
-#else
-	currentOldFree = oldSubspace->getApproximateActiveFreeMemorySize();
+#else /* defined(OMR_GC_LARGE_OBJECT_AREA) */
 	headRoom = (uintptr_t)(_extensions->concurrentKickoffTenuringHeadroom * _extensions->getLastGlobalGCFreeBytes());
-#endif
+#endif /* defined(OMR_GC_LARGE_OBJECT_AREA) */
+
+
 	/* reduce oldspace free memory by fragmented estimation */
-	MM_LargeObjectAllocateStats *stats = oldSubspace->getMemoryPool()->getLargeObjectAllocateStats();
-	if (NULL != stats) {
-		uintptr_t fragmentation = (uintptr_t) ((env->getExtensions())->concurrentSlackFragmentationAdjustmentWeight * stats->getRemainingFreeMemoryAfterEstimate());
-		if (currentOldFree > fragmentation) {
-			currentOldFree -= fragmentation;
+	MM_LargeObjectAllocateStats *largeAllocateStats = oldSubspace->getMemoryPool()->getLargeObjectAllocateStats();
+	if (NULL != largeAllocateStats) {
+		uintptr_t fragmentation = (uintptr_t)(_extensions->concurrentSlackFragmentationAdjustmentWeight * largeAllocateStats->getRemainingFreeMemoryAfterEstimate());
+		if (oldFree > fragmentation) {
+			oldFree -= fragmentation;
 		} else {
-			currentOldFree = 0;
+			oldFree = 0;
 		}
 	}
 
 	uintptr_t nurseryInitialFree = scavengerStats->_avgInitialFree;
-	uintptr_t currentNurseryFree =  newSubspace->getApproximateFreeMemorySize();
+	uintptr_t currentNurseryFree = newSubspace->getApproximateFreeMemorySize();
 
 	/* Calculate the number of scavenge's before we will tenure enough objects to
 	 * fill the old space. If we know next scavenge will percolate then we have no scavenges
-	 * remaining before concurren KO is required
+	 * remaining before concurrent KO is required
 	 */
 	uintptr_t scavengesRemaining = 0;
 	if (scavengerStats->_nextScavengeWillPercolate) {
 		_stats.setKickoffReason(NEXT_SCAVENGE_WILL_PERCOLATE);
 		_languageKickoffReason = NO_LANGUAGE_KICKOFF_REASON;
 	} else {
-		scavengesRemaining = (uintptr_t)(currentOldFree/nurseryPromotion);
+		scavengesRemaining = (uintptr_t)(oldFree / nurseryPromotion);
 	}
 
 	/* The headroom remaining will be the maximum value between 1 , and the current
@@ -1269,7 +1290,7 @@ MM_ConcurrentGC::potentialFreeSpace(MM_EnvironmentBase *env, MM_AllocateDescript
 	 *  and will start concurrent mark earlier
 	 */
 
-	float scavengesRemainingHeadroom = ((float)headRoom)/nurseryPromotion;
+	float scavengesRemainingHeadroom = ((float)headRoom) / nurseryPromotion;
 	scavengesRemainingHeadroom = OMR_MAX(scavengesRemainingHeadroom, 1);
 	scavengesRemaining = MM_Math::saturatingSubtract(scavengesRemaining, (uintptr_t)scavengesRemainingHeadroom);
 
@@ -1280,6 +1301,10 @@ MM_ConcurrentGC::potentialFreeSpace(MM_EnvironmentBase *env, MM_AllocateDescript
 	 */
 
 	uint64_t potentialFree = (uint64_t)currentNurseryFree + ((uint64_t)nurseryInitialFree * (uint64_t)scavengesRemaining);
+
+	if ((0 == (rand() % 30)) || ((CONCURRENT_OFF != _stats.getExecutionMode()) && (0 == (rand() % 10)))) {
+		omrtty_printf("potentialFree %zu nurseryInitialFree %zu scavengesRemaining %zu nurseryPromotion %zu\n", potentialFree, nurseryInitialFree, scavengesRemaining, nurseryPromotion);
+	}
 
 #if !defined(OMR_ENV_DATA64)
 	/* On a 32 bit platforms the amount of free space could be more than 4G. Therefore
@@ -1499,7 +1524,7 @@ MM_ConcurrentGC::concurrentMark(MM_EnvironmentBase *env, MM_MemorySubSpace *subs
 				} else {
 					Assert_MM_true(_extensions->configuration->isIncrementalUpdateBarrierEnabled());
 					/* TODO: Once optimizeConcurrentWB enabled by default this code will be deleted */
-					_stats.switchExecutionMode(CONCURRENT_INIT_COMPLETE, CONCURRENT_ROOT_TRACING);
+					_stats.switchExecutionMode(env, CONCURRENT_INIT_COMPLETE, CONCURRENT_ROOT_TRACING);
 				}
 				break;
 
@@ -1525,7 +1550,7 @@ MM_ConcurrentGC::concurrentMark(MM_EnvironmentBase *env, MM_MemorySubSpace *subs
 				Assert_MM_true(_extensions->configuration->isIncrementalUpdateBarrierEnabled());
 				nextExecutionMode = _concurrentDelegate.getNextTracingMode(CONCURRENT_ROOT_TRACING);
 				Assert_GC_true_with_message(env, (CONCURRENT_ROOT_TRACING < nextExecutionMode) || (CONCURRENT_TRACE_ONLY == nextExecutionMode), "MM_ConcurrentMarkingDelegate::getNextTracingMode(CONCURRENT_ROOT_TRACING) = %zu\n", nextExecutionMode);
-				if(_stats.switchExecutionMode(CONCURRENT_ROOT_TRACING, nextExecutionMode)) {
+				if(_stats.switchExecutionMode(env, CONCURRENT_ROOT_TRACING, nextExecutionMode)) {
 					/* Signal threads for async callback to scan stack*/
 					_concurrentDelegate.signalThreadsToTraceStacks(env);
 					taxPaid = true;
@@ -1537,7 +1562,7 @@ MM_ConcurrentGC::concurrentMark(MM_EnvironmentBase *env, MM_MemorySubSpace *subs
 				/* Client language defines 1 or more execution modes with values > CONCURRENT_ROOT_TRACING */
 				Assert_GC_true_with_message(env, (CONCURRENT_ROOT_TRACING < executionMode) && (CONCURRENT_TRACE_ONLY > executionMode), "MM_ConcurrentStats::_executionMode = %zu\n", executionMode);
 				nextExecutionMode = _concurrentDelegate.getNextTracingMode(executionMode);
-				if (_stats.switchExecutionMode(executionMode, nextExecutionMode)) {
+				if (_stats.switchExecutionMode(env, executionMode, nextExecutionMode)) {
 					Assert_GC_true_with_message(env, (CONCURRENT_ROOT_TRACING < nextExecutionMode) && (CONCURRENT_TRACE_ONLY >= nextExecutionMode), "MM_ConcurrentStats::_executionMode = %zu; MM_ConcurrentMarkingDelegate::getNextTracingMode(MM_ConcurrentStats::_executionMode) = %zu\n", executionMode, nextExecutionMode);
 					/* Collect some roots */
 					bool collectedRoots = false;
@@ -1648,8 +1673,8 @@ MM_ConcurrentGC::timeToKickoffConcurrent(MM_EnvironmentBase *env, MM_AllocateDes
 
 	/* Determine how much "taxable" free space remains to be allocated. */
 #if defined(OMR_GC_MODRON_SCAVENGER)
-	if(_extensions->scavengerEnabled) {
-		remainingFree = potentialFreeSpace(env, allocDescription);
+	if (_extensions->scavengerEnabled) {
+		remainingFree = potentialFreeSpace(env, allocDescription, currentOldFree());
 	} else
 #endif /* OMR_GC_MODRON_SCAVENGER */
 	{
@@ -1674,7 +1699,7 @@ MM_ConcurrentGC::timeToKickoffConcurrent(MM_EnvironmentBase *env, MM_AllocateDes
 		completeConcurrentSweepForKickoff(env);
 #endif /* OMR_GC_CONCURRENT_SWEEP */
 
-		if (_stats.switchExecutionMode(CONCURRENT_OFF, CONCURRENT_INIT_RUNNING)) {
+		if (_stats.switchExecutionMode(env, CONCURRENT_OFF, CONCURRENT_INIT_RUNNING)) {
 			_stats.setRemainingFree(remainingFree);
 			/* Set kickoff reason if it is not set yet */
 			_stats.setKickoffReason(KICKOFF_THRESHOLD_REACHED);
@@ -1809,7 +1834,7 @@ MM_ConcurrentGC::doConcurrentInitialization(MM_EnvironmentBase *env, uintptr_t i
 		/* We are last initializer so tidy up */
 		if (allInitRangesProcessed()) {
 			_concurrentDelegate.concurrentInitializationComplete(env);
-			_stats.switchExecutionMode(CONCURRENT_INIT_RUNNING, CONCURRENT_INIT_COMPLETE);
+			_stats.switchExecutionMode(env, CONCURRENT_INIT_RUNNING, CONCURRENT_INIT_COMPLETE);
 		}
 
 		if (allInitRangesProcessed() || env->isExclusiveAccessRequestWaiting()) {
@@ -1874,7 +1899,7 @@ bool
 MM_ConcurrentGC::concurrentFinalCollection(MM_EnvironmentBase *env, MM_MemorySubSpace *subSpace)
 {
 	/* Switch to FINAL_COLLECTION; if we fail another thread beat us to it so just return */
-	if (_stats.switchExecutionMode(CONCURRENT_EXHAUSTED, CONCURRENT_FINAL_COLLECTION)) {
+	if (_stats.switchExecutionMode(env, CONCURRENT_EXHAUSTED, CONCURRENT_FINAL_COLLECTION)) {
 		OMRPORT_ACCESS_FROM_OMRPORT(env->getPortLibrary());
 		_concurrentPhaseStats._endTime = omrtime_hires_clock();
 		postConcurrentUpdateStatsAndReport(env);
@@ -2017,7 +2042,7 @@ MM_ConcurrentGC::internalPreCollect(MM_EnvironmentBase *env, MM_MemorySubSpace *
 		reportGlobalGCIncrementStart(env);
 
 		/* Switch the executionMode to OFF to complete the STW collection */
-		_stats.switchExecutionMode(executionModeAtGC, CONCURRENT_OFF);
+		_stats.switchExecutionMode(env, executionModeAtGC, CONCURRENT_OFF);
 
 		_extensions->setConcurrentGlobalGCInProgress(false);
 
@@ -2190,7 +2215,7 @@ MM_ConcurrentGC::abortCollection(MM_EnvironmentBase *env, CollectionAbortReason 
 	 */
 	switchConHelperRequest(CONCURRENT_HELPER_MARK, CONCURRENT_HELPER_WAIT);
 
-	_stats.switchExecutionMode(_stats.getExecutionMode(), CONCURRENT_OFF);
+	_stats.switchExecutionMode(env, _stats.getExecutionMode(), CONCURRENT_OFF);
 
 	_extensions->setConcurrentGlobalGCInProgress(false);
 
