@@ -317,7 +317,15 @@ protected:
 	void periodicalTuning(MM_EnvironmentBase *env, uintptr_t freeSize);
 
 #if defined(OMR_GC_MODRON_SCAVENGER)
-	uintptr_t potentialFreeSpace(MM_EnvironmentBase *env, MM_AllocateDescription *allocDescription);
+	uintptr_t currentTenureFree();
+	uintptr_t currentNurseryFree() {
+		MM_MemorySpace *memorySpace = _extensions->heap->getDefaultMemorySpace();
+		MM_MemorySubSpace *newSubspace = memorySpace->getDefaultMemorySubSpace();
+
+		return newSubspace->getApproximateFreeMemorySize();
+	}
+
+	uintptr_t potentialFreeSpace(MM_EnvironmentBase *env, MM_AllocateDescription *allocDescription, uintptr_t tenureFree, uintptr_t nurseryFree);
 #endif /*OMR_GC_MODRON_SCAVENGER */
 
 	void reportConcurrentCompleteTracingStart(MM_EnvironmentBase *env);

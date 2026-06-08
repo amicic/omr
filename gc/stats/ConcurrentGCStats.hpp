@@ -47,6 +47,10 @@ class MM_ConcurrentGCStats : public MM_Base
 	uintptr_t _kickoffThreshold;
 	uintptr_t _cardCleaningThreshold;
 	uintptr_t _remainingFree;
+#if defined(OMR_GC_MODRON_SCAVENGER)
+	uintptr_t _remainingTenureFree;
+	uintptr_t _remainingNurseryFree;
+#endif /* OMR_GC_MODRON_SCAVENGER */
 	
 	uintptr_t _allocationsTaxed;
 	uintptr_t _allocationsTaxedAt0;
@@ -83,10 +87,7 @@ public:
 	MMINLINE bool concurrentMarkNotStarted() { return (_executionMode == CONCURRENT_OFF); }
 	MMINLINE bool concurrentMarkInProgress() { return (_executionMode > CONCURRENT_OFF); }
 	
-	MMINLINE bool switchExecutionMode(uintptr_t oldMode, uintptr_t newMode)
-	{
-		return oldMode == MM_AtomicOperations::lockCompareExchange(&_executionMode, oldMode, newMode);
-	}
+	bool switchExecutionMode(MM_EnvironmentBase *env, uintptr_t oldMode, uintptr_t newMode);
 	
 	MMINLINE uintptr_t  getExecutionModeAtGC() { return _executionModeAtGC; };
 	MMINLINE void  setExecutionModeAtGC(uintptr_t executionMode) { _executionModeAtGC = executionMode; };
@@ -110,9 +111,19 @@ public:
 	MMINLINE uintptr_t getTraceSizeTarget() { return _traceSizeTarget; };
 	MMINLINE void  setTraceSizeTarget(uintptr_t target ){ _traceSizeTarget = target; };
 	
+	// remaining free at the moment of kickoff
 	MMINLINE void  setRemainingFree(uintptr_t free) { _remainingFree = free; };
 	MMINLINE uintptr_t getRemainingFree() { return _remainingFree; };
-	
+
+#if defined(OMR_GC_MODRON_SCAVENGER)
+	MMINLINE void  setRemainingTenureFree(uintptr_t free) { _remainingTenureFree = free; };
+	MMINLINE uintptr_t getRemainingTenureFree() { return _remainingTenureFree; };
+
+	MMINLINE void  setRemainingNurseryFree(uintptr_t free) { _remainingNurseryFree = free; };
+	MMINLINE uintptr_t getRemainingNurseryFree() { return _remainingNurseryFree; };
+#endif /* OMR_GC_MODRON_SCAVENGER */
+
+
 	MMINLINE void  clearAllocationTaxCounts()				
 	{
 		_allocationsTaxed = 0;
@@ -166,7 +177,7 @@ public:
 	MMINLINE uintptr_t getRSObjectsFound(){ return (uintptr_t) _RSObjectsFound; };
 	
 	MMINLINE uintptr_t getCardCleaningThreshold() { return _cardCleaningThreshold; };
-	MMINLINE void  setCardCleaningThreshold(uintptr_t threshold) { _cardCleaningThreshold= threshold; };
+	MMINLINE void  setCardCleaningThreshold(uintptr_t threshold) { _cardCleaningThreshold = threshold; };
 	MMINLINE uintptr_t getTotalTraced() { return _conHelperTraceSizeCount + _conHelperCardCleanCount + _traceSizeCount + _cardCleanCount; };
 	MMINLINE uintptr_t getMutatorsTraced() { return _traceSizeCount + _cardCleanCount; };
 	MMINLINE uintptr_t getConHelperTraced() { return _conHelperTraceSizeCount + _conHelperCardCleanCount; };
@@ -243,6 +254,10 @@ public:
 		_kickoffThreshold(0),
 		_cardCleaningThreshold(0),
 		_remainingFree(0),
+#if defined(OMR_GC_MODRON_SCAVENGER)
+		_remainingTenureFree(0),
+		_remainingNurseryFree(0),
+#endif /* OMR_GC_MODRON_SCAVENGER */
 		_allocationsTaxed(0),
 		_allocationsTaxedAt0(0),
 		_allocationsTaxedAt25(0),
