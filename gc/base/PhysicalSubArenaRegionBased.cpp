@@ -136,6 +136,8 @@ MM_PhysicalSubArenaRegionBased::getPreviousNumaNode()
 uintptr_t
 MM_PhysicalSubArenaRegionBased::doContractInSubSpace(MM_EnvironmentBase *env, uintptr_t contractSize, MM_MemorySubSpace *subspace)
 {
+	OMRPORT_ACCESS_FROM_ENVIRONMENT(env);
+
 	uintptr_t didContractBy = 0;
 	MM_HeapRegionManagerTarok *manager = MM_HeapRegionManagerTarok::getHeapRegionManager(_heap);
 	uintptr_t regionSize = manager->getRegionSize();
@@ -158,6 +160,9 @@ MM_PhysicalSubArenaRegionBased::doContractInSubSpace(MM_EnvironmentBase *env, ui
 		void *contractBase = subspace->removeExistingMemory(env, this, regionSize, base, top);
 		Assert_MM_true(contractBase == regionToRelease->getLowAddress());
 		manager->releaseTableRegions(env, regionToRelease);
+		UDATA tableIndex = manager->mapDescriptorToRegionTableIndex(regionToRelease);
+
+		omrtty_printf("doContractInSubSpace %zu\n", tableIndex);
 		
 		/* We set the low valid and high valid address to make sure 
 		 * the rest of the collector structure doesn't incorrectly assume 
