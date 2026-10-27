@@ -1884,7 +1884,8 @@ MM_Scavenger::copyForVariant(MM_EnvironmentStandard *env, MM_ForwardedHeader* fo
 }
 
 MMINLINE void
-MM_Scavenger::depthCopyHotFields(MM_EnvironmentStandard *env, MM_ForwardedHeader* forwardedHeader, omrobjectptr_t destinationObjectPtr) {
+MM_Scavenger::depthCopyHotFields(MM_EnvironmentStandard *env, MM_ForwardedHeader* forwardedHeader, omrobjectptr_t destinationObjectPtr)
+{
 	/* depth copy the hot fields of an object up to a depth specified by depthCopyMax */
 	if (env->_hotFieldCopyDepthCount < _extensions->depthCopyMax) {
 		uint8_t hotFieldOffset = _extensions->objectModel.getHotFieldOffset(forwardedHeader);
@@ -1905,17 +1906,41 @@ MM_Scavenger::depthCopyHotFields(MM_EnvironmentStandard *env, MM_ForwardedHeader
 }
 
 MMINLINE void
-MM_Scavenger::copyHotField(MM_EnvironmentStandard *env, omrobjectptr_t destinationObjectPtr, uint8_t offset) {
+MM_Scavenger::copyHotField(MM_EnvironmentStandard *env, omrobjectptr_t destinationObjectPtr, uint8_t offset)
+{
+	//OMRPORT_ACCESS_FROM_OMRPORT(env->getPortLibrary());
+
+//	bool shouldPrint = false;
 	bool const compressed = _extensions->compressObjectReferences();
 	GC_SlotObject hotFieldObject(_omrVM, GC_SlotObject::addToSlotAddress((fomrobject_t*)((uintptr_t)destinationObjectPtr), offset, compressed));
 	omrobjectptr_t objectPtr = hotFieldObject.readReferenceFromSlot();
+//	if (NULL != objectPtr) {
+//		J9Class* clazz = J9GC_J9OBJECT_CLAZZ(destinationObjectPtr, env);
+//		J9ROMClass *romClass = clazz->romClass;
+//		J9UTF8* className = J9ROMCLASS_CLASSNAME(romClass);
+//
+//		const char * const concurrentLinkedQueueNodeName = "java/util/concurrent/ConcurrentLinkedQueue$Node";
+//		shouldPrint = (0 == compareUTF8Length(className->data, className->length, (U_8*)concurrentLinkedQueueNodeName, strlen(concurrentLinkedQueueNodeName)));
+//		if (shouldPrint) {
+//			omrtty_printf("copyHotField worker %zu destinationObjectPtr (j/u/c/CLQ$N) %p offset %zu before %p evac %zu\n", env->getWorkerID(), destinationObjectPtr, offset, objectPtr, (uintptr_t)isObjectInEvacuateMemory(objectPtr));
+//		}
+//	}
+
 	if (isObjectInEvacuateMemory(objectPtr)) {
 		/* Hot field needs to be copy and forwarded.  Check if the work has already been done */
 		MM_ForwardedHeader forwardHeaderHotField(objectPtr, compressed);
 		if (!forwardHeaderHotField.isForwardedPointer()) {
 			env->_hotFieldCopyDepthCount += 1;
 			copyObject(env, &forwardHeaderHotField);
+//			if (shouldPrint) {
+//				MM_ForwardedHeader forwardHeader(objectPtr, compressed);
+//				omrtty_printf("copyHotField worker %zu objectPtr %p after forwarding %p\n", env->getWorkerID(), objectPtr, forwardHeader.getForwardedObject());
+//			}
 			env->_hotFieldCopyDepthCount -= 1;
+		} else {
+//			if (shouldPrint) {
+//				omrtty_printf("copyHotField worker %zu objectPtr %p already forwarded %p\n", env->getWorkerID(), objectPtr, forwardHeaderHotField.getForwardedObject());
+//			}
 		}
 	}
 }
@@ -2101,6 +2126,8 @@ MM_Scavenger::scavengeObjectSlots(MM_EnvironmentStandard *env, MM_CopyScanCacheS
 void
 MM_Scavenger::deepScanOutline(MM_EnvironmentStandard *env, omrobjectptr_t objectPtr, uintptr_t priorityFieldOffset1, uintptr_t priorityFieldOffset2)
 {
+	//OMRPORT_ACCESS_FROM_OMRPORT(env->getPortLibrary());
+
 	void *currentDeepObj = objectPtr;
 	uintptr_t priorityField = priorityFieldOffset1;
 	/* Throttle - Deep scan should be terminated when the free list is utilized more than 50% */
@@ -2111,8 +2138,29 @@ MM_Scavenger::deepScanOutline(MM_EnvironmentStandard *env, omrobjectptr_t object
 	env->_scavengerStats._totalDeepStructures += 1;
 #endif /* J9MODRON_TGC_PARALLEL_STATISTICS */
 
+//	J9Class* clazz = J9GC_J9OBJECT_CLAZZ(objectPtr, env);
+//	J9ROMClass *romClass = clazz->romClass;
+//	J9UTF8* className = J9ROMCLASS_CLASSNAME(romClass);
+//
+//	const char * const concurrentLinkedQueueNodeName = "java/util/concurrent/ConcurrentLinkedQueue$Node";
+//	bool shouldPrint = (0 == compareUTF8Length(className->data, className->length, (U_8*)concurrentLinkedQueueNodeName, strlen(concurrentLinkedQueueNodeName)));
+//
+//	if (shouldPrint) {
+//		J9Class* clazz = J9GC_J9OBJECT_CLAZZ(objectPtr, env);
+//		omrtty_printf("deepScanOutline worker %zu objectPtr %p %.*s\n", env->getWorkerID(), objectPtr, J9ROMCLASS_CLASSNAME(clazz->romClass)->length, J9ROMCLASS_CLASSNAME(clazz->romClass)->data);
+//	}
+
+	env->disableHotFieldDepthCopy();
+
 	do {
 		GC_SlotObject prioritySlot(env->getOmrVM(), (fomrobject_t*)(((uintptr_t) currentDeepObj) + priorityField));
+//		omrobjectptr_t before = prioritySlot.readReferenceFromSlot();
+//		if (shouldPrint) {
+//			J9Class* clazz = J9GC_J9OBJECT_CLAZZ(objectPtr, env);
+//			omrtty_printf("deepScanOutline worker %zu before %p %.*s evac %zu\n",
+//					env->getWorkerID(), before, J9ROMCLASS_CLASSNAME(clazz->romClass)->length, J9ROMCLASS_CLASSNAME(clazz->romClass)->data, (uintptr_t)isObjectInEvacuateMemory(before));
+//		}
+
 		copyAndForward(env, &prioritySlot);
 		/* Did we encounter an already visited/NULL object? */
 		if (NULL == env->_effectiveCopyScanCache) {
@@ -2121,6 +2169,9 @@ MM_Scavenger::deepScanOutline(MM_EnvironmentStandard *env, omrobjectptr_t object
 				break;
 			}
 			priorityField = priorityFieldOffset2;
+//			if (shouldPrint) {
+//				omrtty_printf("deepScanOutline worker %zu switch\n", env->getWorkerID());
+//			}
 			continue;
 		}
 
@@ -2132,10 +2183,14 @@ MM_Scavenger::deepScanOutline(MM_EnvironmentStandard *env, omrobjectptr_t object
 			break;
 		}
 		currentDeepObj = prioritySlot.readReferenceFromSlot();
-
+//		if (shouldPrint) {
+//			omrtty_printf("deepScanOutline worker %zu after %p (count %zu)\n", env->getWorkerID(), currentDeepObj, objDeepScanned);
+//		}
 	/* The successfully copied object slot can possibly be overwritten with NULL by a mutator (CS).
 	 * To avoid race condition, we need a NULL check before we proceed. */
 	} while (NULL != currentDeepObj);
+
+	env->enableHotFieldDepthCopy();
 
 #if defined(J9MODRON_TGC_PARALLEL_STATISTICS)
 	env->_scavengerStats._totalObjsDeepScanned += objDeepScanned;
