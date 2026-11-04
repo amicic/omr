@@ -92,6 +92,8 @@ MM_NUMAManager::recacheNUMASupport(MM_EnvironmentBase *env)
 	} else {
 		nodeCount = _simulatedNodeCount;
 	}
+
+	omrtty_printf("recacheNUMASupport nodeCount %zu\n", nodeCount);
 	if (0 != nodeCount) {
 		/* we want to support NUMA either via the machine's physical NUMA or our simulated (aka "purely logical") NUMA */ 
 		uintptr_t nodeArraySize = sizeof(J9MemoryNodeDetail) * nodeCount;
