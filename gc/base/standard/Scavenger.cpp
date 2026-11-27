@@ -298,6 +298,10 @@ MM_Scavenger::initialize(MM_EnvironmentBase *env)
 		return false;
 	}
 
+	/* Cache heap ranges for fast "valid object" checks (this can change in an expanding heap situation, so we refetch every cycle) */
+	_heapBase = _extensions->heap->getHeapBase();
+	_heapTop = _extensions->heap->getHeapTop();
+
 	return true;
 }
 
